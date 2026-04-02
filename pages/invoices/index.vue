@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { fromYm, toYm } from "~/lib/month"
+
 const { format } = useCurrency()
 const { currentYm } = useMonth()
 
@@ -14,7 +16,7 @@ type Row = {
   dueDate: string | null
 }
 
-const filterMonth = ref(currentYm())
+const filterMonth = ref(fromYm(currentYm()))
 const filterStatus = ref("all")
 const rows = ref<Row[]>([])
 const loading = ref(true)
@@ -22,7 +24,7 @@ const loading = ref(true)
 async function load() {
   loading.value = true
   try {
-    const q: Record<string, string> = { month: filterMonth.value }
+    const q: Record<string, string> = { month: toYm(filterMonth.value) }
     if (filterStatus.value && filterStatus.value !== "all") q.status = filterStatus.value
     rows.value = await $fetch("/api/invoices", { query: q })
   } finally {
@@ -51,7 +53,7 @@ async function add() {
   await $fetch("/api/invoices", {
     method: "POST",
     body: {
-      month: filterMonth.value,
+      month: toYm(filterMonth.value),
       grossAmount: form.grossAmount,
       netAmount: form.netAmount || "0",
       vatAmount: form.vatAmount || "0",
@@ -110,7 +112,7 @@ function statusBadgeVariant(s: string) {
       <div class="flex flex-wrap gap-4">
         <div class="grid gap-2">
           <Label>Miesiąc</Label>
-          <Input v-model="filterMonth" type="month" class="w-[11rem]" />
+          <MonthPicker v-model="filterMonth" class="w-44" />
         </div>
         <div class="grid gap-2 min-w-[140px]">
           <Label>Status</Label>

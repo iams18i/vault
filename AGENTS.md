@@ -22,6 +22,14 @@ Notes for automated agents working on this repo.
 - **Money fields**: stored as Postgres `decimal(14,2)`; treat as strings in JS/TS (avoid float math)
 - **shadcn components**: live in `components/ui/` (no prefix configured)
 
+## Coding standards
+
+- **Quotes**: use double quotes in JS/TS/Vue.
+- **Imports**: group type imports first, then value imports; keep 1 blank line between groups.
+- **Nuxt alias**: prefer `~/` for app code imports.
+- **UI patterns**: prefer shadcn wrappers (`components/ui/*`) + `cn()` for class composition.
+- **Tailwind**: prefer named utilities when equivalent exists (e.g. `w-60` over `w-[240px]`).
+
 ## Architecture map
 
 - UI routes: `pages/`

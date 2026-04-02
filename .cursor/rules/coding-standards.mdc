@@ -1,0 +1,10 @@
+# Coding standards
+
+Applies to this repository.
+
+- Use **double quotes** in JS/TS/Vue.
+- Group **type imports first**, then value imports; keep 1 blank line between groups.
+- Prefer Nuxt alias **`~/`** for app code imports.
+- Prefer shadcn wrappers (`components/ui/*`) + `cn()` for class composition.
+- Prefer Tailwind named utilities when equivalent exists (avoid arbitrary values unless needed).
+

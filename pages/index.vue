@@ -2,22 +2,23 @@
 const route = useRoute()
 const router = useRouter()
 const { format } = useCurrency()
-const { currentYm, shiftMonth } = useMonth()
+const { currentYm } = useMonth()
+import { fromYm, shiftMonth, toYm } from "~/lib/month"
 
-const month = ref(currentYm())
+const month = ref(fromYm(currentYm()))
 
 onMounted(() => {
   const q = route.query.month
   if (typeof q === "string" && /^\d{4}-\d{2}$/.test(q)) {
-    month.value = q
+    month.value = fromYm(q)
   }
 })
 
 watch(month, (m) => {
-  router.replace({ query: { month: m } })
+  router.replace({ query: { month: toYm(m) } })
 })
 
-const dashboardUrl = computed(() => `/api/dashboard/${month.value}`)
+const dashboardUrl = computed(() => `/api/dashboard/${toYm(month.value)}`)
 const { data, pending, error } = await useFetch(dashboardUrl)
 
 function prev() {
@@ -52,7 +53,7 @@ function vatDashLabel(row: { vatExempt?: boolean; vatRatePercent?: string | null
           <span class="sr-only">Poprzedni</span>
           ←
         </Button>
-        <Input v-model="month" type="month" class="w-[11rem]" />
+        <MonthPicker v-model="month" class="w-44" />
         <Button variant="outline" size="icon" @click="next">
           <span class="sr-only">Następny</span>
           →

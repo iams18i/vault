@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { fromYm, toYm } from "~/lib/month"
+
 const { format } = useCurrency()
 const { currentYm } = useMonth()
 
@@ -12,7 +14,7 @@ type Row = {
   notes: string | null
 }
 
-const filterMonth = ref(currentYm())
+const filterMonth = ref(fromYm(currentYm()))
 const filterCategory = ref("")
 const rows = ref<Row[]>([])
 const loading = ref(true)
@@ -20,7 +22,7 @@ const loading = ref(true)
 async function load() {
   loading.value = true
   try {
-    const q: Record<string, string> = { month: filterMonth.value }
+    const q: Record<string, string> = { month: toYm(filterMonth.value) }
     if (filterCategory.value) q.category = filterCategory.value
     rows.value = await $fetch<Row[]>("/api/monthly-expenses", { query: q })
   } finally {
@@ -44,7 +46,7 @@ async function add() {
   await $fetch("/api/monthly-expenses", {
     method: "POST",
     body: {
-      month: filterMonth.value,
+      month: toYm(filterMonth.value),
       name: form.name,
       amount: form.amount,
       category: form.category || null,
@@ -68,7 +70,7 @@ async function remove(id: number) {
 
 const editing = ref<Row | null>(null)
 const editForm = reactive({
-  month: "",
+  month: fromYm(currentYm()),
   name: "",
   amount: "",
   category: "",
@@ -78,7 +80,7 @@ const editForm = reactive({
 
 function openEdit(row: Row) {
   editing.value = row
-  editForm.month = row.month
+  editForm.month = fromYm(row.month)
   editForm.name = row.name
   editForm.amount = row.amount
   editForm.category = row.category ?? ""
@@ -98,7 +100,7 @@ async function saveEdit() {
   await $fetch(`/api/monthly-expenses/${editing.value.id}`, {
     method: "PUT",
     body: {
-      month: editForm.month,
+      month: toYm(editForm.month),
       name: editForm.name,
       amount: editForm.amount,
       category: editForm.category || null,
@@ -121,9 +123,9 @@ async function saveEdit() {
       <div class="flex flex-wrap items-end gap-4">
         <div class="grid gap-2">
           <Label>Miesiąc</Label>
-          <Input v-model="filterMonth" type="month" class="w-[11rem]" />
+          <MonthPicker v-model="filterMonth" class="w-44" />
         </div>
-        <div class="grid gap-2 min-w-[14rem] flex-1 max-w-xs">
+        <div class="grid gap-2 min-w-56 flex-1 max-w-xs">
           <Label>Kategoria (filtr)</Label>
           <CategoryCombobox
             v-model="filterCategory"
@@ -217,7 +219,7 @@ async function saveEdit() {
               </div>
               <div class="grid gap-2">
                 <Label for="exp-edit-month">Miesiąc</Label>
-                <Input id="exp-edit-month" v-model="editForm.month" type="month" class="w-full" />
+                <MonthPicker v-model="editForm.month" class="w-full" />
               </div>
               <div class="grid gap-2">
                 <Label for="exp-edit-amount">Kwota</Label>

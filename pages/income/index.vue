@@ -6,6 +6,7 @@ import {
   previewVatGross,
   vatSelectToPayload,
 } from "~/constants/vat-pl"
+import { fromYm, toYm } from "~/lib/month"
 
 const { format } = useCurrency()
 const { currentYm } = useMonth()
@@ -25,7 +26,7 @@ type Row = {
   notes: string | null
 }
 
-const filterMonth = ref(currentYm())
+const filterMonth = ref(fromYm(currentYm()))
 const rows = ref<Row[]>([])
 const loading = ref(true)
 
@@ -59,7 +60,7 @@ const previewTax = computed(() => {
 async function load() {
   loading.value = true
   try {
-    rows.value = await $fetch<Row[]>("/api/monthly-income", { query: { month: filterMonth.value } })
+    rows.value = await $fetch<Row[]>("/api/monthly-income", { query: { month: toYm(filterMonth.value) } })
   } finally {
     loading.value = false
   }
@@ -74,7 +75,7 @@ async function add() {
   await $fetch("/api/monthly-income", {
     method: "POST",
     body: {
-      month: filterMonth.value,
+      month: toYm(filterMonth.value),
       company: form.company.trim(),
       type: form.type,
       hours: form.type === "hourly" ? form.hours : null,
@@ -188,7 +189,7 @@ const editDialogOpen = computed({
 
     <div class="flex flex-wrap items-center gap-3">
       <Label for="inc-month" class="text-muted-foreground">Miesiąc</Label>
-      <Input id="inc-month" v-model="filterMonth" type="month" class="w-[11rem]" />
+      <MonthPicker v-model="filterMonth" class="w-44" />
     </div>
 
     <Card>
