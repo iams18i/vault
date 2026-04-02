@@ -24,7 +24,8 @@ Notes for automated agents working on this repo.
 
 ## Coding standards
 
-- **Quotes**: use double quotes in JS/TS/Vue.
+- **Formatter**: follow Prettier (don’t fight it).
+- **Quotes**: single quotes in JS/TS/Vue (per Prettier).
 - **Imports**: group type imports first, then value imports; keep 1 blank line between groups.
 - **Nuxt alias**: prefer `~/` for app code imports.
 - **UI patterns**: prefer shadcn wrappers (`components/ui/*`) + `cn()` for class composition.

@@ -1,37 +1,37 @@
 <script setup lang="ts">
-import type { HTMLAttributes } from "vue"
+import type { HTMLAttributes } from 'vue'
 
-import { CalendarIcon, ChevronLeft, ChevronRight } from "lucide-vue-next"
-import { computed, ref, watch } from "vue"
-import { cn } from "~/lib/utils"
+import { CalendarIcon, ChevronLeft, ChevronRight } from 'lucide-vue-next'
+import { computed, ref, watch } from 'vue'
+import { cn } from '~/lib/utils'
 
 const MONTHS_SHORT = [
-  "Jan",
-  "Feb",
-  "Mar",
-  "Apr",
-  "May",
-  "Jun",
-  "Jul",
-  "Aug",
-  "Sep",
-  "Oct",
-  "Nov",
-  "Dec",
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
 ] as const
 const MONTHS_FULL = [
-  "January",
-  "February",
-  "March",
-  "April",
-  "May",
-  "June",
-  "July",
-  "August",
-  "September",
-  "October",
-  "November",
-  "December",
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
 ] as const
 
 type Props = {
@@ -40,16 +40,16 @@ type Props = {
   maxDate?: Date
   placeholder?: string
   disabled?: boolean
-  class?: HTMLAttributes["class"]
+  class?: HTMLAttributes['class']
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  placeholder: "Pick a month",
+  placeholder: 'Pick a month',
   disabled: false,
 })
 
 const emit = defineEmits<{
-  "update:modelValue": [value: Date | null]
+  'update:modelValue': [value: Date | null]
 }>()
 
 const open = ref(false)
@@ -88,7 +88,7 @@ function isCurrentMonth(monthIndex: number) {
 
 function handleMonthSelect(monthIndex: number) {
   const next = new Date(viewYear.value, monthIndex, 1)
-  emit("update:modelValue", next)
+  emit('update:modelValue', next)
   open.value = false
 }
 
