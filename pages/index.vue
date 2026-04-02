@@ -48,17 +48,17 @@ function vatDashLabel(row: { vatExempt?: boolean; vatRatePercent?: string | null
         <h1 class="text-2xl font-semibold tracking-tight">Pulpit miesięczny</h1>
         <p class="text-sm text-muted-foreground">Podsumowanie dochodu netto i kosztów</p>
       </div>
-      <div class="inline-flex items-center">
-        <Button variant="outline" size="icon" class="rounded-r-none" @click="prev">
+      <ButtonGroup aria-label="Nawigacja miesiąca">
+        <Button variant="outline" size="icon" @click="prev">
           <span class="sr-only">Poprzedni</span>
           ←
         </Button>
         <MonthPicker v-model="month" class="w-44 rounded-none border-x-0" />
-        <Button variant="outline" size="icon" class="rounded-l-none" @click="next">
+        <Button variant="outline" size="icon" @click="next">
           <span class="sr-only">Następny</span>
           →
         </Button>
-      </div>
+      </ButtonGroup>
     </div>
 
     <p v-if="pending" class="text-sm text-muted-foreground">Ładowanie…</p>
