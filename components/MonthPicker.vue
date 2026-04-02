@@ -99,6 +99,20 @@ function handleNextYear() {
   viewYear.value += 1
 }
 
+function isCurrentMonthDisabled() {
+  const now = new Date()
+  const currentMonthDate = new Date(now.getFullYear(), now.getMonth(), 1)
+  if (props.minDate && currentMonthDate < firstOfMonth(props.minDate)) return true
+  if (props.maxDate && currentMonthDate > firstOfMonth(props.maxDate)) return true
+  return false
+}
+
+function selectCurrentMonth() {
+  const now = new Date()
+  viewYear.value = now.getFullYear()
+  handleMonthSelect(now.getMonth())
+}
+
 const label = computed(() => {
   const v = props.modelValue
   if (!v) return null
@@ -172,6 +186,19 @@ const label = computed(() => {
             @click="handleMonthSelect(index)"
           >
             {{ m }}
+          </Button>
+        </div>
+
+        <div class="mt-3 border-t pt-3">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            class="w-full"
+            :disabled="isCurrentMonthDisabled()"
+            @click="selectCurrentMonth"
+          >
+            Current Month
           </Button>
         </div>
       </div>
