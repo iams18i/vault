@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { fromYm, toYm } from "~/lib/month"
+import { onKeyStroke } from '@vueuse/core'
+
+import { fromYm, toYm } from '~/lib/month'
 
 const { format } = useCurrency()
 const { currentYm } = useMonth()
@@ -15,36 +17,65 @@ type Row = {
 }
 
 const filterMonth = ref(fromYm(currentYm()))
-const filterCategory = ref("")
+const filterCategory = ref('')
 const rows = ref<Row[]>([])
 const loading = ref(true)
+const addDialogOpen = ref(false)
+
+const showAppleShortcut = ref(true)
+
+function openAddDialog() {
+  addDialogOpen.value = true
+}
+
+onKeyStroke(
+  (e) => e.key.toLowerCase() === 'n' && (e.metaKey || e.ctrlKey),
+  (e) => {
+    const el = e.target as HTMLElement | null
+    if (el?.closest?.('input, textarea, select, [contenteditable="true"]'))
+      return
+    e.preventDefault()
+    openAddDialog()
+  },
+)
 
 async function load() {
   loading.value = true
   try {
     const q: Record<string, string> = { month: toYm(filterMonth.value) }
     if (filterCategory.value) q.category = filterCategory.value
-    rows.value = await $fetch<Row[]>("/api/monthly-expenses", { query: q })
+    rows.value = await $fetch<Row[]>('/api/monthly-expenses', { query: q })
   } finally {
     loading.value = false
   }
 }
 
 watch([filterMonth, filterCategory], load)
-onMounted(load)
+onMounted(() => {
+  load()
+  showAppleShortcut.value = /Mac|iPhone|iPod|iPad/i.test(navigator.userAgent)
+})
 
 const form = reactive({
-  name: "",
-  amount: "",
-  category: "",
-  expenseDate: "",
-  notes: "",
+  name: '',
+  amount: '',
+  category: '',
+  expenseDate: '',
+  notes: '',
 })
+
+function resetAddForm() {
+  form.name = ''
+  form.amount = ''
+  form.category = ''
+  form.expenseDate = ''
+  form.notes = ''
+}
 
 async function add() {
   if (!form.name || !form.amount) return
-  await $fetch("/api/monthly-expenses", {
-    method: "POST",
+  await $fetch('/api/monthly-expenses', {
+    method: 'POST',
     body: {
       month: toYm(filterMonth.value),
       name: form.name,
@@ -54,28 +85,25 @@ async function add() {
       notes: form.notes || null,
     },
   })
-  form.name = ""
-  form.amount = ""
-  form.category = ""
-  form.expenseDate = ""
-  form.notes = ""
+  resetAddForm()
+  addDialogOpen.value = false
   await load()
 }
 
 async function remove(id: number) {
-  if (!confirm("Usunąć?")) return
-  await $fetch(`/api/monthly-expenses/${id}`, { method: "DELETE" })
+  if (!confirm('Usunąć?')) return
+  await $fetch(`/api/monthly-expenses/${id}`, { method: 'DELETE' })
   await load()
 }
 
 const editing = ref<Row | null>(null)
 const editForm = reactive({
   month: fromYm(currentYm()),
-  name: "",
-  amount: "",
-  category: "",
-  expenseDate: "",
-  notes: "",
+  name: '',
+  amount: '',
+  category: '',
+  expenseDate: '',
+  notes: '',
 })
 
 function openEdit(row: Row) {
@@ -83,9 +111,9 @@ function openEdit(row: Row) {
   editForm.month = fromYm(row.month)
   editForm.name = row.name
   editForm.amount = row.amount
-  editForm.category = row.category ?? ""
-  editForm.expenseDate = row.expenseDate ?? ""
-  editForm.notes = row.notes ?? ""
+  editForm.category = row.category ?? ''
+  editForm.expenseDate = row.expenseDate ?? ''
+  editForm.notes = row.notes ?? ''
 }
 
 const editDialogOpen = computed({
@@ -98,7 +126,7 @@ const editDialogOpen = computed({
 async function saveEdit() {
   if (!editing.value || !editForm.name || !editForm.amount) return
   await $fetch(`/api/monthly-expenses/${editing.value.id}`, {
-    method: "PUT",
+    method: 'PUT',
     body: {
       month: toYm(editForm.month),
       name: editForm.name,
@@ -114,19 +142,55 @@ async function saveEdit() {
 </script>
 
 <template>
-  <div class="space-y-8 max-w-3xl">
+  <div class="space-y-8 max-w-6xl">
     <div class="flex flex-wrap items-end justify-between gap-4">
       <div>
         <h1 class="text-2xl font-semibold tracking-tight">Wydatki</h1>
-        <p class="text-sm text-muted-foreground mt-1">Jednorazowe w wybranym miesiącu</p>
+        <p class="text-sm text-muted-foreground mt-1">
+          Jednorazowe w wybranym miesiącu
+        </p>
       </div>
-      <div class="flex flex-wrap items-end gap-4">
-        <div class="grid gap-2">
+      <div class="flex w-full flex-wrap items-end justify-end gap-4 sm:w-auto">
+        <div class="inline-flex gap-2 sm:w-44 sm:shrink-0">
           <Label>Miesiąc</Label>
-          <MonthPicker v-model="filterMonth" class="w-44" />
+          <MonthPicker v-model="filterMonth" class="w-full" />
         </div>
-        <div class="grid gap-2 min-w-56 flex-1 max-w-xs">
-          <Label>Kategoria (filtr)</Label>
+        <Button
+          class="w-full shrink-0 sm:w-auto"
+          size="lg"
+          aria-keyshortcuts="Meta+N Control+N"
+          @click="openAddDialog"
+        >
+          <span
+            class="inline-flex w-full items-center justify-center gap-2 sm:w-auto sm:justify-start"
+          >
+            Dodaj wydatek
+            <KbdGroup
+              class="pointer-events-none hidden sm:inline-flex"
+              aria-hidden="true"
+            >
+              <template v-if="showAppleShortcut">
+                <Kbd>⌘</Kbd>
+                <span class="text-muted-foreground text-xs font-medium">+</span>
+                <Kbd>N</Kbd>
+              </template>
+              <template v-else>
+                <Kbd>Ctrl</Kbd>
+                <span class="text-muted-foreground text-xs font-medium">+</span>
+                <Kbd>N</Kbd>
+              </template>
+            </KbdGroup>
+          </span>
+        </Button>
+      </div>
+    </div>
+
+    <Card class="min-w-0">
+      <CardHeader
+        class="flex flex-col gap-4 space-y-0 sm:flex-row sm:items-end sm:justify-between"
+      >
+        <CardTitle>Lista</CardTitle>
+        <div class="grid w-full gap-2 sm:w-56 sm:shrink-0">
           <CategoryCombobox
             v-model="filterCategory"
             allow-empty
@@ -135,45 +199,6 @@ async function saveEdit() {
             trigger-class="w-full justify-between"
           />
         </div>
-      </div>
-    </div>
-
-    <Card>
-      <CardHeader>
-        <CardTitle>Nowy wydatek</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <form class="space-y-4" @submit.prevent="add">
-          <div class="grid gap-4 sm:grid-cols-2">
-            <div class="grid gap-2 sm:col-span-2">
-              <Label for="exp-name">Nazwa</Label>
-              <Input id="exp-name" v-model="form.name" />
-            </div>
-            <div class="grid gap-2">
-              <Label for="exp-amount">Kwota</Label>
-              <Input id="exp-amount" v-model="form.amount" type="number" step="0.01" />
-            </div>
-            <div class="grid gap-2">
-              <Label>Kategoria</Label>
-              <CategoryCombobox v-model="form.category" />
-            </div>
-            <div class="grid gap-2">
-              <Label for="exp-date">Data</Label>
-              <Input id="exp-date" v-model="form.expenseDate" type="date" />
-            </div>
-            <div class="grid gap-2 sm:col-span-2">
-              <Label for="exp-notes">Notatki</Label>
-              <Input id="exp-notes" v-model="form.notes" />
-            </div>
-          </div>
-          <Button type="submit">Dodaj</Button>
-        </form>
-      </CardContent>
-    </Card>
-
-    <Card>
-      <CardHeader>
-        <CardTitle>Lista</CardTitle>
       </CardHeader>
       <CardContent>
         <p v-if="loading" class="text-sm text-muted-foreground">Ładowanie…</p>
@@ -190,12 +215,27 @@ async function saveEdit() {
           <TableBody>
             <TableRow v-for="r in rows" :key="r.id">
               <TableCell>{{ r.name }}</TableCell>
-              <TableCell class="text-right tabular-nums">{{ format(r.amount) }}</TableCell>
-              <TableCell class="text-muted-foreground">{{ r.category || "—" }}</TableCell>
-              <TableCell class="text-muted-foreground">{{ r.expenseDate || "—" }}</TableCell>
+              <TableCell class="text-right tabular-nums">{{
+                format(r.amount)
+              }}</TableCell>
+              <TableCell class="text-muted-foreground">{{
+                r.category || '—'
+              }}</TableCell>
+              <TableCell class="text-muted-foreground">{{
+                r.expenseDate || '—'
+              }}</TableCell>
               <TableCell class="text-right space-x-2">
-                <Button variant="ghost" size="sm" @click="openEdit(r)">Edytuj</Button>
-                <Button variant="ghost" size="sm" class="text-destructive" @click="remove(r.id)">Usuń</Button>
+                <Button variant="ghost" size="sm" @click="openEdit(r)"
+                  >Edytuj</Button
+                >
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  class="text-destructive"
+                  @click="remove(r.id)"
+                >
+                  Usuń
+                </Button>
               </TableCell>
             </TableRow>
           </TableBody>
@@ -204,12 +244,70 @@ async function saveEdit() {
       </CardContent>
     </Card>
 
+    <Dialog v-model:open="addDialogOpen">
+      <DialogContent class="sm:max-w-lg">
+        <form @submit.prevent="add">
+          <DialogHeader>
+            <DialogTitle>Nowy wydatek</DialogTitle>
+            <DialogDescription>
+              Wpis zostanie dodany do miesiąca: {{ toYm(filterMonth) }}.
+            </DialogDescription>
+          </DialogHeader>
+          <div class="grid gap-4 py-2">
+            <div class="grid gap-4 sm:grid-cols-2">
+              <div class="grid gap-2 sm:col-span-2">
+                <Label for="exp-add-name">Nazwa</Label>
+                <Input id="exp-add-name" v-model="form.name" />
+              </div>
+              <div class="grid gap-2">
+                <Label for="exp-add-amount">Kwota</Label>
+                <Input
+                  id="exp-add-amount"
+                  v-model="form.amount"
+                  type="number"
+                  step="0.01"
+                />
+              </div>
+              <div class="grid gap-2">
+                <Label>Kategoria</Label>
+                <CategoryCombobox v-model="form.category" />
+              </div>
+              <div class="grid gap-2 sm:col-span-2">
+                <Label for="exp-add-date">Data</Label>
+                <Input
+                  id="exp-add-date"
+                  v-model="form.expenseDate"
+                  type="date"
+                />
+              </div>
+              <div class="grid gap-2 sm:col-span-2">
+                <Label for="exp-add-notes">Notatki</Label>
+                <Input id="exp-add-notes" v-model="form.notes" />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              @click="addDialogOpen = false"
+              >Anuluj</Button
+            >
+            <Button type="submit">Dodaj</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+
     <Dialog v-model:open="editDialogOpen">
       <DialogContent class="sm:max-w-lg">
         <form @submit.prevent="saveEdit">
           <DialogHeader>
             <DialogTitle>Edytuj wydatek</DialogTitle>
-            <DialogDescription>Możesz zmienić miesiąc wpisu (przeniesienie między okresami).</DialogDescription>
+            <DialogDescription
+              >Możesz zmienić miesiąc wpisu (przeniesienie między
+              okresami).</DialogDescription
+            >
           </DialogHeader>
           <div v-if="editing" class="grid gap-4 py-2">
             <div class="grid gap-4 sm:grid-cols-2">
@@ -223,7 +321,12 @@ async function saveEdit() {
               </div>
               <div class="grid gap-2">
                 <Label for="exp-edit-amount">Kwota</Label>
-                <Input id="exp-edit-amount" v-model="editForm.amount" type="number" step="0.01" />
+                <Input
+                  id="exp-edit-amount"
+                  v-model="editForm.amount"
+                  type="number"
+                  step="0.01"
+                />
               </div>
               <div class="grid gap-2 sm:col-span-2">
                 <Label>Kategoria</Label>
@@ -231,7 +334,11 @@ async function saveEdit() {
               </div>
               <div class="grid gap-2 sm:col-span-2">
                 <Label for="exp-edit-date">Data</Label>
-                <Input id="exp-edit-date" v-model="editForm.expenseDate" type="date" />
+                <Input
+                  id="exp-edit-date"
+                  v-model="editForm.expenseDate"
+                  type="date"
+                />
               </div>
               <div class="grid gap-2 sm:col-span-2">
                 <Label for="exp-edit-notes">Notatki</Label>
@@ -240,7 +347,9 @@ async function saveEdit() {
             </div>
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" @click="editing = null">Anuluj</Button>
+            <Button type="button" variant="outline" @click="editing = null"
+              >Anuluj</Button
+            >
             <Button type="submit">Zapisz</Button>
           </DialogFooter>
         </form>

@@ -136,8 +136,11 @@ function vatDashLabel(row: {
           <span class="sr-only">Poprzedni</span>
           <ChevronLeft class="size-4" />
         </Button>
-        <MonthPicker v-model="month" class="w-44 rounded-none border-x-0" />
-        <Button variant="outline" size="icon" @click="next">
+        <MonthPicker
+          v-model="month"
+          class="w-44 rounded-none border-0 text-center justify-center"
+        />
+        <Button variant="ghost" size="icon" @click="next">
           <span class="sr-only">Następny</span>
           <ChevronRight class="size-4" />
         </Button>

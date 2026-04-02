@@ -4,6 +4,7 @@ import type { HTMLAttributes } from 'vue'
 import { CalendarIcon, ChevronLeft, ChevronRight } from 'lucide-vue-next'
 import { computed, ref, watch } from 'vue'
 import { cn } from '~/lib/utils'
+import type { ButtonVariants } from './ui/button'
 
 const MONTHS_SHORT = [
   'Jan',
@@ -41,11 +42,13 @@ type Props = {
   placeholder?: string
   disabled?: boolean
   class?: HTMLAttributes['class']
+  triggerVariant?: ButtonVariants['variant']
 }
 
 const props = withDefaults(defineProps<Props>(), {
   placeholder: 'Pick a month',
   disabled: false,
+  triggerVariant: 'ghost',
 })
 
 const emit = defineEmits<{
@@ -102,8 +105,10 @@ function handleNextYear() {
 function isCurrentMonthDisabled() {
   const now = new Date()
   const currentMonthDate = new Date(now.getFullYear(), now.getMonth(), 1)
-  if (props.minDate && currentMonthDate < firstOfMonth(props.minDate)) return true
-  if (props.maxDate && currentMonthDate > firstOfMonth(props.maxDate)) return true
+  if (props.minDate && currentMonthDate < firstOfMonth(props.minDate))
+    return true
+  if (props.maxDate && currentMonthDate > firstOfMonth(props.maxDate))
+    return true
   return false
 }
 
@@ -125,7 +130,7 @@ const label = computed(() => {
     <PopoverTrigger as-child>
       <Button
         type="button"
-        variant="outline"
+        :variant="triggerVariant"
         :disabled="disabled"
         :class="
           cn(
