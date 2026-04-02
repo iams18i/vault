@@ -1,0 +1,46 @@
+# Dependencies & build
+node_modules
+.pnpm-store
+.nuxt
+.output
+dist
+coverage
+.turbo
+*.tsbuildinfo
+
+# Environment & secrets (never commit real credentials)
+.env
+.env.*
+!.env.example
+.env.local
+.env.*.local
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer
+id_rsa
+id_rsa.pub
+*.pem.key
+*-credentials.json
+credentials.json
+.secrets
+
+# Logs & debug
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS & editor junk
+.DS_Store
+Thumbs.db
+.idea
+*.swp
+*~
+
+# Local DB dumps / backups (often contain PII)
+*.dump
+*.sql.gz
