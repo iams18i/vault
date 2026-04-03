@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import { onKeyStroke } from '@vueuse/core'
+
+import DatePickerField from '~/components/DatePickerField.vue'
+
 const { format } = useCurrency()
 
 type Row = {
@@ -17,6 +21,35 @@ const year = ref(new Date().getFullYear())
 const rows = ref<Row[]>([])
 const loading = ref(true)
 
+const addDialogOpen = ref(false)
+const addFormErrors = ref<string[]>([])
+const showAppleShortcut = ref(true)
+
+function openAddDialog() {
+  addFormErrors.value = []
+  addDialogOpen.value = true
+}
+
+onKeyStroke(
+  (e) => e.key.toLowerCase() === 'n' && (e.metaKey || e.ctrlKey),
+  (e) => {
+    const el = e.target as HTMLElement | null
+    if (el?.closest?.('input, textarea, select, [contenteditable="true"]'))
+      return
+    e.preventDefault()
+    openAddDialog()
+  },
+)
+
+onKeyStroke(
+  (e) => e.key === 'Enter' && (e.metaKey || e.ctrlKey),
+  (e) => {
+    if (!addDialogOpen.value) return
+    e.preventDefault()
+    void submitAdd()
+  },
+)
+
 async function load() {
   loading.value = true
   try {
@@ -27,7 +60,6 @@ async function load() {
 }
 
 watch(year, load)
-onMounted(load)
 
 const form = reactive({
   name: "",
@@ -39,28 +71,75 @@ const form = reactive({
   notes: "",
 })
 
-async function add() {
-  if (!form.name || !form.amountDue) return
-  await $fetch("/api/tax-entries", {
-    method: "POST",
-    body: {
-      name: form.name,
-      year: year.value,
-      month: form.month,
-      amountDue: form.amountDue,
-      amountPaid: form.amountPaid || "0",
-      dueDate: form.dueDate || null,
-      status: form.status,
-      notes: form.notes || null,
-    },
-  })
+function resetAddForm() {
   form.name = ""
+  form.month = new Date().getMonth() + 1
   form.amountDue = ""
   form.amountPaid = "0"
   form.dueDate = ""
+  form.status = "pending"
   form.notes = ""
-  await load()
+  addFormErrors.value = []
 }
+
+function collectAddFormErrors(): string[] {
+  const errs: string[] = []
+  if (!form.name.trim()) errs.push("Podaj nazwę.")
+  const due = String(form.amountDue).trim()
+  if (!due) errs.push("Podaj kwotę należną.")
+  else {
+    const n = Number(due.replace(",", "."))
+    if (!Number.isFinite(n)) errs.push("Należne musi być liczbą.")
+  }
+  const m = Number(form.month)
+  if (!Number.isInteger(m) || m < 1 || m > 12)
+    errs.push("Miesiąc musi być liczbą od 1 do 12.")
+  return errs
+}
+
+async function submitAdd() {
+  const errs = collectAddFormErrors()
+  addFormErrors.value = errs
+  if (errs.length) return
+  try {
+    await $fetch("/api/tax-entries", {
+      method: "POST",
+      body: {
+        name: form.name.trim(),
+        year: year.value,
+        month: form.month,
+        amountDue: form.amountDue,
+        amountPaid: form.amountPaid || "0",
+        dueDate: form.dueDate || null,
+        status: form.status,
+        notes: form.notes.trim() || null,
+      },
+    })
+    resetAddForm()
+    addDialogOpen.value = false
+    await load()
+  } catch (e: unknown) {
+    const fe = e as { data?: { message?: string; statusMessage?: string } }
+    const msg = fe.data?.message ?? fe.data?.statusMessage
+    addFormErrors.value = [
+      typeof msg === "string" && msg.trim()
+        ? msg
+        : "Nie udało się zapisać. Spróbuj ponownie.",
+    ]
+  }
+}
+
+watch(addDialogOpen, (open) => {
+  if (open) {
+    addFormErrors.value = []
+    resetAddForm()
+  }
+})
+
+onMounted(() => {
+  load()
+  showAppleShortcut.value = /Mac|iPhone|iPod|iPad/i.test(navigator.userAgent)
+})
 
 async function remove(id: number) {
   if (!confirm("Usunąć?")) return
@@ -73,6 +152,11 @@ function statusLabel(s: string) {
   if (s === "partial") return "Częściowo"
   if (s === "paid") return "Zapłacone"
   return s
+}
+
+/** List column: `MM-RRRR` (e.g. 04-2026). */
+function formatTaxPeriod(month: number, year: number) {
+  return `${String(month).padStart(2, "0")}-${year}`
 }
 
 const editing = ref<Row | null>(null)
@@ -158,9 +242,41 @@ const totals = computed(() => {
           PIT, ZUS… VAT z dochodu jest na pulpicie. Zapłaty wpisz jako pozycję z „VAT” w nazwie (ten sam miesiąc).
         </p>
       </div>
-      <div class="grid gap-2">
-        <Label>Rok</Label>
-        <Input v-model.number="year" type="number" min="2000" max="2100" class="w-28" />
+      <div
+        class="flex w-full flex-wrap items-end justify-end gap-6 sm:w-auto sm:gap-8"
+      >
+        <div class="grid w-full min-w-0 gap-2 sm:w-auto sm:shrink-0">
+          <Label for="tax-year">Rok</Label>
+          <YearPicker id="tax-year" v-model="year" :min-year="2000" :max-year="2100" />
+        </div>
+        <Button
+          type="button"
+          class="w-full shrink-0 sm:w-auto"
+          size="lg"
+          aria-keyshortcuts="Meta+N Control+N"
+          @click="openAddDialog"
+        >
+          <span
+            class="inline-flex w-full items-center justify-center gap-2 sm:w-auto sm:justify-start"
+          >
+            Dodaj wpis
+            <KbdGroup
+              class="pointer-events-none hidden sm:inline-flex"
+              aria-hidden="true"
+            >
+              <template v-if="showAppleShortcut">
+                <Kbd>⌘</Kbd>
+                <span class="text-inherit text-xs font-medium">+</span>
+                <Kbd>N</Kbd>
+              </template>
+              <template v-else>
+                <Kbd>Ctrl</Kbd>
+                <span class="text-inherit text-xs font-medium">+</span>
+                <Kbd>N</Kbd>
+              </template>
+            </KbdGroup>
+          </span>
+        </Button>
       </div>
     </div>
 
@@ -184,49 +300,117 @@ const totals = computed(() => {
       </CardContent>
     </Card>
 
-    <Card>
-      <CardHeader>
-        <CardTitle>Nowy wpis</CardTitle>
-      </CardHeader>
-      <CardContent class="space-y-4">
-        <div class="grid gap-4 sm:grid-cols-2">
-          <div class="grid gap-2 sm:col-span-2">
-            <Label>Nazwa</Label>
-            <Input v-model="form.name" placeholder="np. ZUS, PIT" />
+    <Dialog v-model:open="addDialogOpen">
+      <DialogContent class="sm:max-w-lg">
+        <form @submit.prevent="submitAdd">
+          <DialogHeader>
+            <DialogTitle>Nowy wpis</DialogTitle>
+            <DialogDescription>
+              Pozycja zostanie zapisana dla wybranego roku w nagłówku strony.
+            </DialogDescription>
+          </DialogHeader>
+          <div
+            v-if="addFormErrors.length"
+            class="rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+            role="alert"
+            aria-live="polite"
+          >
+            <ul class="list-inside list-disc space-y-1">
+              <li v-for="(msg, i) in addFormErrors" :key="i">{{ msg }}</li>
+            </ul>
           </div>
-          <div class="grid gap-2">
-            <Label>Miesiąc (1–12)</Label>
-            <Input v-model.number="form.month" type="number" min="1" max="12" />
+          <div class="grid gap-4 py-2">
+            <div class="grid gap-4 sm:grid-cols-2">
+              <div class="grid gap-2 sm:col-span-2">
+                <Label for="tax-add-name">Nazwa</Label>
+                <Input
+                  id="tax-add-name"
+                  v-model="form.name"
+                  placeholder="np. ZUS, PIT"
+                />
+              </div>
+              <div class="grid gap-2">
+                <Label for="tax-add-month">Miesiąc (1–12)</Label>
+                <Input
+                  id="tax-add-month"
+                  v-model.number="form.month"
+                  type="number"
+                  min="1"
+                  max="12"
+                />
+              </div>
+              <div class="grid gap-2">
+                <Label for="tax-add-due">Należne</Label>
+                <Input
+                  id="tax-add-due"
+                  v-model="form.amountDue"
+                  type="number"
+                  step="0.01"
+                />
+              </div>
+              <div class="grid gap-2">
+                <Label for="tax-add-paid">Zapłacone</Label>
+                <Input
+                  id="tax-add-paid"
+                  v-model="form.amountPaid"
+                  type="number"
+                  step="0.01"
+                />
+              </div>
+              <div class="grid min-w-0 gap-2 sm:col-span-2">
+                <Label for="tax-add-date">Termin</Label>
+                <DatePickerField
+                  id="tax-add-date"
+                  v-model="form.dueDate"
+                  trigger-class="w-full"
+                />
+              </div>
+              <div class="grid gap-2 sm:col-span-2">
+                <Label>Status</Label>
+                <Select v-model="form.status">
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pending">Oczekuje</SelectItem>
+                    <SelectItem value="partial">Częściowo</SelectItem>
+                    <SelectItem value="paid">Zapłacone</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
           </div>
-          <div class="grid gap-2">
-            <Label>Należne</Label>
-            <Input v-model="form.amountDue" type="number" step="0.01" />
-          </div>
-          <div class="grid gap-2">
-            <Label>Zapłacone</Label>
-            <Input v-model="form.amountPaid" type="number" step="0.01" />
-          </div>
-          <div class="grid gap-2">
-            <Label>Termin</Label>
-            <Input v-model="form.dueDate" type="date" />
-          </div>
-          <div class="grid gap-2">
-            <Label>Status</Label>
-            <Select v-model="form.status">
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="pending">Oczekuje</SelectItem>
-                <SelectItem value="partial">Częściowo</SelectItem>
-                <SelectItem value="paid">Zapłacone</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-        <Button @click="add">Dodaj</Button>
-      </CardContent>
-    </Card>
+          <DialogFooter class="mt-6 gap-2 pt-2">
+            <Button
+              type="button"
+              variant="outline"
+              @click="addDialogOpen = false"
+              >Anuluj</Button
+            >
+            <Button type="submit" aria-keyshortcuts="Meta+Enter Control+Enter">
+              <span class="inline-flex items-center justify-center gap-2">
+                Dodaj
+                <KbdGroup
+                  class="pointer-events-none hidden sm:inline-flex"
+                  aria-hidden="true"
+                >
+                  <template v-if="showAppleShortcut">
+                    <Kbd>⌘</Kbd>
+                    <span class="text-inherit text-xs font-medium">+</span>
+                    <Kbd>Enter</Kbd>
+                  </template>
+                  <template v-else>
+                    <Kbd>Ctrl</Kbd>
+                    <span class="text-inherit text-xs font-medium">+</span>
+                    <Kbd>Enter</Kbd>
+                  </template>
+                </KbdGroup>
+              </span>
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
 
     <Card>
       <CardHeader>
@@ -238,7 +422,7 @@ const totals = computed(() => {
           <TableHeader>
             <TableRow>
               <TableHead>Nazwa</TableHead>
-              <TableHead>M-c</TableHead>
+              <TableHead>Okres</TableHead>
               <TableHead class="text-right">Należne</TableHead>
               <TableHead class="text-right">Zapłacone</TableHead>
               <TableHead>Status</TableHead>
@@ -248,7 +432,9 @@ const totals = computed(() => {
           <TableBody>
             <TableRow v-for="r in rows" :key="r.id">
               <TableCell class="font-medium">{{ r.name }}</TableCell>
-              <TableCell>{{ r.month }}</TableCell>
+              <TableCell class="tabular-nums">{{
+                formatTaxPeriod(r.month, r.year)
+              }}</TableCell>
               <TableCell class="text-right tabular-nums">{{ format(r.amountDue) }}</TableCell>
               <TableCell class="text-right tabular-nums">{{ format(r.amountPaid) }}</TableCell>
               <TableCell>
@@ -280,7 +466,7 @@ const totals = computed(() => {
               </div>
               <div class="grid gap-2">
                 <Label for="tax-edit-year">Rok</Label>
-                <Input id="tax-edit-year" v-model.number="editForm.year" type="number" min="2000" max="2100" />
+                <YearPicker id="tax-edit-year" v-model="editForm.year" :min-year="2000" :max-year="2100" />
               </div>
               <div class="grid gap-2">
                 <Label for="tax-edit-month">Miesiąc (1–12)</Label>
@@ -294,9 +480,13 @@ const totals = computed(() => {
                 <Label for="tax-edit-paid">Zapłacone</Label>
                 <Input id="tax-edit-paid" v-model="editForm.amountPaid" type="number" step="0.01" />
               </div>
-              <div class="grid gap-2 sm:col-span-2">
+              <div class="grid min-w-0 gap-2 sm:col-span-2">
                 <Label for="tax-edit-date">Termin</Label>
-                <Input id="tax-edit-date" v-model="editForm.dueDate" type="date" />
+                <DatePickerField
+                  id="tax-edit-date"
+                  v-model="editForm.dueDate"
+                  trigger-class="w-full"
+                />
               </div>
               <div class="grid gap-2 sm:col-span-2">
                 <Label>Status</Label>

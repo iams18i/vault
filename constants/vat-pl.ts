@@ -29,3 +29,18 @@ export function previewVatGross(net: number, sel: VatSelectValue): { vat: number
   const gross = Math.round((net + vat) * 100) / 100
   return { vat, gross }
 }
+
+/** Brutto → netto + VAT (2 grosze); `vat + net` sumuje się do brutto. */
+export function previewNetVatFromGross(
+  gross: number,
+  sel: VatSelectValue,
+): { net: number; vat: number } {
+  if (sel === "exempt") {
+    const net = Math.round(gross * 100) / 100
+    return { net, vat: 0 }
+  }
+  const rate = Number(sel)
+  const net = Math.round((gross / (1 + rate / 100)) * 100) / 100
+  const vat = Math.round((gross - net) * 100) / 100
+  return { net, vat }
+}
