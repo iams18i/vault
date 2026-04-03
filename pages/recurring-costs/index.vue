@@ -1,5 +1,10 @@
 <script setup lang="ts">
+import { getLocalTimeZone, today } from '@internationalized/date'
 import { onKeyStroke } from '@vueuse/core'
+
+import DatePickerField from '~/components/DatePickerField.vue'
+import { cn } from '@/lib/utils'
+import type { DatePickerPreset } from '~/types/date-picker-preset'
 
 const { format } = useCurrency()
 const { currentYm } = useMonth()
@@ -19,6 +24,7 @@ const filterCategory = ref('')
 const rows = ref<Row[]>([])
 const loading = ref(true)
 const addDialogOpen = ref(false)
+const addFormErrors = ref<string[]>([])
 
 /** Apple-style ⌘N vs Ctrl + N (set on client). */
 const showAppleShortcut = ref(true)
@@ -38,6 +44,15 @@ onKeyStroke(
   },
 )
 
+onKeyStroke(
+  (e) => e.key === 'Enter' && (e.metaKey || e.ctrlKey),
+  (e) => {
+    if (!addDialogOpen.value) return
+    e.preventDefault()
+    void submitAdd()
+  },
+)
+
 async function load() {
   loading.value = true
   try {
@@ -49,9 +64,47 @@ async function load() {
 }
 
 watch(filterCategory, load)
+watch(addDialogOpen, (open) => {
+  if (open) addFormErrors.value = []
+})
 onMounted(() => {
   load()
   showAppleShortcut.value = /Mac|iPhone|iPod|iPad/i.test(navigator.userAgent)
+})
+
+function calendarDateToIso(d: ReturnType<typeof today>) {
+  return `${d.year}-${String(d.month).padStart(2, '0')}-${String(d.day).padStart(2, '0')}`
+}
+
+const recurringStartPresets = computed<DatePickerPreset[]>(() => {
+  const z = getLocalTimeZone()
+  const t = today(z)
+  const first = t.set({ day: 1 })
+  return [
+    { label: 'Dziś', value: calendarDateToIso(t) },
+    { label: 'Pierwszy dzień miesiąca', value: calendarDateToIso(first) },
+    {
+      label: '1. dzień następnego miesiąca',
+      value: calendarDateToIso(first.add({ months: 1 })),
+    },
+  ]
+})
+
+const recurringEndPresets = computed<DatePickerPreset[]>(() => {
+  const z = getLocalTimeZone()
+  const t = today(z)
+  return [
+    { label: 'Bez daty końca', value: '' },
+    { label: 'Za 6 miesięcy', value: calendarDateToIso(t.add({ months: 6 })) },
+    {
+      label: 'Za 12 miesięcy',
+      value: calendarDateToIso(t.add({ months: 12 })),
+    },
+    {
+      label: 'Za 24 miesiące',
+      value: calendarDateToIso(t.add({ months: 24 })),
+    },
+  ]
 })
 
 const form = reactive({
@@ -72,25 +125,66 @@ function resetAddForm() {
   form.endDate = ''
   form.dayOfMonth = 1
   form.notes = ''
+  addFormErrors.value = []
 }
 
-async function add() {
-  if (!form.name || !form.amount || !form.startDate) return
-  await $fetch('/api/recurring-costs', {
-    method: 'POST',
-    body: {
-      name: form.name,
-      amount: form.amount,
-      category: form.category || null,
-      startDate: form.startDate,
-      endDate: form.endDate || null,
-      dayOfMonth: form.dayOfMonth,
-      notes: form.notes || null,
-    },
-  })
-  resetAddForm()
-  addDialogOpen.value = false
-  await load()
+const isoDateRe = /^\d{4}-\d{2}-\d{2}$/
+
+function collectAddFormErrors(): string[] {
+  const errs: string[] = []
+  if (!form.name.trim()) errs.push('Podaj nazwę.')
+  const amt = String(form.amount).trim()
+  if (!amt) {
+    errs.push('Podaj kwotę.')
+  } else {
+    const n = Number(amt.replace(',', '.'))
+    if (!Number.isFinite(n) || n <= 0)
+      errs.push('Kwota musi być liczbą większą od zera.')
+  }
+  if (!form.startDate || !isoDateRe.test(form.startDate))
+    errs.push('Podaj prawidłową datę początku.')
+  const dom = Number(form.dayOfMonth)
+  if (!Number.isInteger(dom) || dom < 1 || dom > 31)
+    errs.push('Dzień miesiąca musi być liczbą całkowitą od 1 do 31.')
+  const end = form.endDate?.trim() ?? ''
+  if (end) {
+    if (!isoDateRe.test(end))
+      errs.push('Podaj prawidłową datę końca lub pozostaw puste.')
+    else if (form.startDate && end < form.startDate)
+      errs.push('Data końca nie może być wcześniejsza niż data początku.')
+  }
+  return errs
+}
+
+async function submitAdd() {
+  const errs = collectAddFormErrors()
+  addFormErrors.value = errs
+  if (errs.length) return
+  try {
+    await $fetch('/api/recurring-costs', {
+      method: 'POST',
+      body: {
+        name: form.name,
+        amount: form.amount,
+        category: form.category || null,
+        startDate: form.startDate,
+        endDate: form.endDate || null,
+        dayOfMonth: form.dayOfMonth,
+        notes: form.notes || null,
+      },
+    })
+    resetAddForm()
+    addDialogOpen.value = false
+    await load()
+  } catch (e: unknown) {
+    const fe = e as { data?: { message?: string; statusMessage?: string } }
+    const msg = fe.data?.message ?? fe.data?.statusMessage
+    addFormErrors.value = [
+      typeof msg === 'string' && msg.trim()
+        ? msg
+        : 'Nie udało się zapisać. Spróbuj ponownie.',
+    ]
+  }
 }
 
 async function remove(id: number) {
@@ -208,10 +302,41 @@ async function saveEdit() {
   editing.value = null
   await load()
 }
+
+const notesTextareaClass = cn(
+  'placeholder:text-muted-foreground selection:bg-primary selection:text-primary-foreground dark:bg-input/30 border-input min-h-16 max-h-60 w-full min-w-0 resize-none rounded-md border bg-transparent px-3 py-2 text-base shadow-xs transition-[color,box-shadow] outline-none disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm',
+  'focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]',
+  'aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive',
+)
+
+const NOTE_TA_MAX_PX = 240
+
+const addNotesTextareaRef = ref<HTMLTextAreaElement | null>(null)
+const editNotesTextareaRef = ref<HTMLTextAreaElement | null>(null)
+
+function resizeNotesTextarea(el: HTMLTextAreaElement | null) {
+  if (!el) return
+  el.style.height = 'auto'
+  const h = Math.min(el.scrollHeight, NOTE_TA_MAX_PX)
+  el.style.height = `${h}px`
+  el.style.overflowY = el.scrollHeight > NOTE_TA_MAX_PX ? 'auto' : 'hidden'
+}
+
+function onNotesInput(e: Event) {
+  resizeNotesTextarea(e.target as HTMLTextAreaElement)
+}
+
+watch(addDialogOpen, (open) => {
+  if (open) nextTick(() => resizeNotesTextarea(addNotesTextareaRef.value))
+})
+
+watch(editing, (row) => {
+  if (row) nextTick(() => resizeNotesTextarea(editNotesTextareaRef.value))
+})
 </script>
 
 <template>
-  <div class="space-y-8 max-w-6xl">
+  <div class="space-y-8 max-w-7xl">
     <div class="flex flex-wrap items-end justify-between gap-4">
       <div>
         <h1 class="text-2xl font-semibold tracking-tight">Koszty stałe</h1>
@@ -235,12 +360,12 @@ async function saveEdit() {
           >
             <template v-if="showAppleShortcut">
               <Kbd>⌘</Kbd>
-              <span class="text-muted-foreground text-xs font-medium">+</span>
+              <span class="text-inherit text-xs font-medium">+</span>
               <Kbd>N</Kbd>
             </template>
             <template v-else>
               <Kbd>Ctrl</Kbd>
-              <span class="text-muted-foreground text-xs font-medium">+</span>
+              <span class="text-inherit text-xs font-medium">+</span>
               <Kbd>N</Kbd>
             </template>
           </KbdGroup>
@@ -284,9 +409,9 @@ async function saveEdit() {
                 <TableCell class="text-right tabular-nums">{{
                   format(r.amount)
                 }}</TableCell>
-                <TableCell class="text-sm text-muted-foreground">{{
-                  r.category || '—'
-                }}</TableCell>
+                <TableCell>
+                  <CategoryLabel :name="r.category" />
+                </TableCell>
                 <TableCell class="text-sm text-muted-foreground">
                   {{ r.startDate }} → {{ r.endDate || '—' }}
                 </TableCell>
@@ -316,20 +441,17 @@ async function saveEdit() {
           class="space-y-3 rounded-lg border border-border bg-muted/30 p-4"
         >
           <div>
-            <p
-              class="text-xs font-medium uppercase tracking-wide text-muted-foreground"
-            >
-              Podsumowanie
-            </p>
+            <h3 class="font-medium uppercase tracking-wide">Podsumowanie</h3>
             <div
               class="mt-2 flex flex-wrap items-baseline justify-between gap-4"
             >
               <span class="text-sm text-muted-foreground"
                 >Suma miesięczna (lista)</span
               >
-              <span class="text-xl font-semibold tabular-nums tracking-tight">{{
-                format(totalMonthly)
-              }}</span>
+              <span
+                class="text-xl font-heading font-semibold tabular-nums tracking-tight"
+                >{{ format(totalMonthly) }}</span
+              >
             </div>
           </div>
           <Separator />
@@ -374,19 +496,29 @@ async function saveEdit() {
 
     <Dialog v-model:open="addDialogOpen">
       <DialogContent class="sm:max-w-lg">
-        <form @submit.prevent="add">
+        <form @submit.prevent="submitAdd">
           <DialogHeader>
             <DialogTitle>Nowy koszt stały</DialogTitle>
             <DialogDescription
               >Wpis zostanie dodany do listy po zapisaniu.</DialogDescription
             >
           </DialogHeader>
+          <div
+            v-if="addFormErrors.length"
+            class="rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+            role="alert"
+            aria-live="polite"
+          >
+            <ul class="list-inside list-disc space-y-1">
+              <li v-for="(msg, i) in addFormErrors" :key="i">{{ msg }}</li>
+            </ul>
+          </div>
           <div class="grid gap-4 py-2">
+            <div class="grid gap-2">
+              <Label for="rc-add-name">Nazwa</Label>
+              <Input id="rc-add-name" v-model="form.name" />
+            </div>
             <div class="grid gap-4 sm:grid-cols-2">
-              <div class="grid gap-2">
-                <Label for="rc-add-name">Nazwa</Label>
-                <Input id="rc-add-name" v-model="form.name" />
-              </div>
               <div class="grid gap-2">
                 <Label for="rc-add-amount">Kwota / mies. (PLN)</Label>
                 <Input
@@ -400,38 +532,76 @@ async function saveEdit() {
                 <Label>Kategoria</Label>
                 <CategoryCombobox v-model="form.category" />
               </div>
-              <div class="grid gap-2">
-                <Label for="rc-add-dom">Dzień miesiąca</Label>
-                <Input
-                  id="rc-add-dom"
-                  v-model.number="form.dayOfMonth"
-                  type="number"
-                  min="1"
-                  max="31"
+            </div>
+            <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <div class="grid min-w-0 gap-2">
+                <Label for="rc-add-start">Początek</Label>
+                <DatePickerField
+                  id="rc-add-start"
+                  v-model="form.startDate"
+                  :presets="recurringStartPresets"
+                  presets-title="Szybki wybór"
                 />
               </div>
-              <div class="grid gap-2">
-                <Label for="rc-add-start">Początek</Label>
-                <Input id="rc-add-start" v-model="form.startDate" type="date" />
-              </div>
-              <div class="grid gap-2">
+              <div class="grid min-w-0 gap-2">
                 <Label for="rc-add-end">Koniec (opcj.)</Label>
-                <Input id="rc-add-end" v-model="form.endDate" type="date" />
+                <DatePickerField
+                  id="rc-add-end"
+                  v-model="form.endDate"
+                  placeholder="Bez daty"
+                  :presets="recurringEndPresets"
+                  presets-title="Szybki wybór"
+                />
+              </div>
+              <div class="grid min-w-0 gap-2">
+                <Label for="rc-add-dom">Dzień miesiąca</Label>
+                <DayPicker id="rc-add-dom" v-model="form.dayOfMonth" />
               </div>
             </div>
             <div class="grid gap-2">
               <Label for="rc-add-notes">Notatki</Label>
-              <Input id="rc-add-notes" v-model="form.notes" />
+              <textarea
+                id="rc-add-notes"
+                ref="addNotesTextareaRef"
+                v-model="form.notes"
+                rows="2"
+                :class="notesTextareaClass"
+                @input="onNotesInput"
+              />
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter class="mt-8 pt-2">
             <Button
               type="button"
               variant="outline"
               @click="addDialogOpen = false"
               >Anuluj</Button
             >
-            <Button type="submit">Dodaj</Button>
+            <Button
+              type="submit"
+              aria-keyshortcuts="Meta+Enter Control+Enter"
+            >
+              <span
+                class="inline-flex items-center justify-center gap-2"
+              >
+                Dodaj
+                <KbdGroup
+                  class="pointer-events-none hidden sm:inline-flex"
+                  aria-hidden="true"
+                >
+                  <template v-if="showAppleShortcut">
+                    <Kbd>⌘</Kbd>
+                    <span class="text-inherit text-xs font-medium">+</span>
+                    <Kbd>Enter</Kbd>
+                  </template>
+                  <template v-else>
+                    <Kbd>Ctrl</Kbd>
+                    <span class="text-inherit text-xs font-medium">+</span>
+                    <Kbd>Enter</Kbd>
+                  </template>
+                </KbdGroup>
+              </span>
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>
@@ -466,39 +636,45 @@ async function saveEdit() {
                 <Label>Kategoria</Label>
                 <CategoryCombobox v-model="editForm.category" />
               </div>
-              <div class="grid gap-2">
-                <Label for="rc-edit-dom">Dzień miesiąca</Label>
-                <Input
-                  id="rc-edit-dom"
-                  v-model.number="editForm.dayOfMonth"
-                  type="number"
-                  min="1"
-                  max="31"
-                />
-              </div>
-              <div class="grid gap-2">
+            </div>
+            <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <div class="grid min-w-0 gap-2">
                 <Label for="rc-edit-start">Początek</Label>
-                <Input
+                <DatePickerField
                   id="rc-edit-start"
                   v-model="editForm.startDate"
-                  type="date"
+                  :presets="recurringStartPresets"
+                  presets-title="Szybki wybór"
                 />
               </div>
-              <div class="grid gap-2">
+              <div class="grid min-w-0 gap-2">
                 <Label for="rc-edit-end">Koniec (opcj.)</Label>
-                <Input
+                <DatePickerField
                   id="rc-edit-end"
                   v-model="editForm.endDate"
-                  type="date"
+                  placeholder="Bez daty końca"
+                  :presets="recurringEndPresets"
+                  presets-title="Szybki wybór"
                 />
+              </div>
+              <div class="grid min-w-0 gap-2">
+                <Label for="rc-edit-dom">Dzień miesiąca</Label>
+                <DayPicker id="rc-edit-dom" v-model="editForm.dayOfMonth" />
               </div>
             </div>
             <div class="grid gap-2">
               <Label for="rc-edit-notes">Notatki</Label>
-              <Input id="rc-edit-notes" v-model="editForm.notes" />
+              <textarea
+                id="rc-edit-notes"
+                ref="editNotesTextareaRef"
+                v-model="editForm.notes"
+                rows="2"
+                :class="notesTextareaClass"
+                @input="onNotesInput"
+              />
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter class="mt-8 pt-2">
             <Button type="button" variant="outline" @click="editing = null"
               >Anuluj</Button
             >

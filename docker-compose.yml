@@ -16,15 +16,12 @@ services:
       - "3000:3000"
     environment:
       DATABASE_URL: postgres://expenses:expenses@db:5432/expenses
-      HOST: 0.0.0.0
-      NODE_ENV: development
+      NUXT_DATABASE_URL: postgres://expenses:expenses@db:5432/expenses
+      NODE_ENV: production
+      NITRO_HOST: 0.0.0.0
+      PORT: 3000
     depends_on:
       - db
-    command: pnpm dev
-    volumes:
-      - .:/app
-      - /app/node_modules
-      - /app/.nuxt
 
 volumes:
   pgdata:

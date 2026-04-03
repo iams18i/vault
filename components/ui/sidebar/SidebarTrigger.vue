@@ -5,9 +5,13 @@ import { cn } from "@/lib/utils"
 import { Button } from '@/components/ui/button'
 import { useSidebar } from "./utils"
 
-const props = defineProps<{
-  class?: HTMLAttributes["class"]
-}>()
+const props = withDefaults(defineProps<{
+  class?: HTMLAttributes['class']
+  /** Screen reader label (e.g. Polish). */
+  srLabel?: string
+}>(), {
+  srLabel: 'Toggle Sidebar',
+})
 
 const { toggleSidebar } = useSidebar()
 </script>
@@ -22,6 +26,6 @@ const { toggleSidebar } = useSidebar()
     @click="toggleSidebar"
   >
     <PanelLeft />
-    <span class="sr-only">Toggle Sidebar</span>
+    <span class="sr-only">{{ srLabel }}</span>
   </Button>
 </template>

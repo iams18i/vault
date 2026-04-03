@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { Check, Plus } from "lucide-vue-next"
-import { computed, watch } from "vue"
-import { cn } from "@/lib/utils"
+import { Check, Plus } from 'lucide-vue-next'
+import { computed, watch } from 'vue'
+
 import {
   CommandEmpty,
   CommandGroup,
@@ -10,14 +10,17 @@ import {
   CommandList,
   CommandSeparator,
   useCommand,
-} from "@/components/ui/command"
+} from '@/components/ui/command'
+import { cn } from '@/lib/utils'
+
+import type { CategoryListItem } from '~/composables/useCategoryColors'
 
 const props = defineProps<{
-  items: string[]
+  items: CategoryListItem[]
   modelValue: string
   open: boolean
   /** `empty`: open with blank search (category filter). `model`: prefill with current value (form). */
-  searchOnOpen: "empty" | "model"
+  searchOnOpen: 'empty' | 'model'
 }>()
 
 const emit = defineEmits<{
@@ -31,7 +34,8 @@ watch(
   () => props.open,
   (v) => {
     if (v) {
-      filterState.search = props.searchOnOpen === "empty" ? "" : props.modelValue || ""
+      filterState.search =
+        props.searchOnOpen === 'empty' ? '' : props.modelValue || ''
     }
   },
   { immediate: true },
@@ -40,7 +44,9 @@ watch(
 const trimmedSearch = computed(() => filterState.search.trim())
 
 const exactMatch = computed(() =>
-  props.items.some((i) => i.toLowerCase() === trimmedSearch.value.toLowerCase()),
+  props.items.some(
+    (i) => i.name.toLowerCase() === trimmedSearch.value.toLowerCase(),
+  ),
 )
 
 const showCreate = computed(() => Boolean(trimmedSearch.value && !exactMatch.value))
@@ -51,12 +57,12 @@ const showCreateAfterList = computed(
 
 function onCreate() {
   const name = trimmedSearch.value
-  if (name) emit("create", name)
+  if (name) emit('create', name)
 }
 
 /** Enter in search: create when no list matches (capture so Listbox does not eat Enter). */
 function onEnterCapture(e: KeyboardEvent) {
-  if (e.key !== "Enter") return
+  if (e.key !== 'Enter') return
   if (!showCreate.value) return
   if (filterState.filtered.count > 0) return
   e.preventDefault()
@@ -92,15 +98,29 @@ function onEnterCapture(e: KeyboardEvent) {
     <CommandGroup v-if="items.length" class="p-0">
       <CommandItem
         v-for="item in items"
-        :key="item"
-        :value="item"
+        :key="item.name"
+        :value="item.name"
         class="px-2 py-1.5"
-        @select="emit('pick', item)"
+        @select="emit('pick', item.name)"
       >
         <Check
-          :class="cn('mr-2 size-4 shrink-0', modelValue === item ? 'opacity-100' : 'opacity-0')"
+          :class="
+            cn(
+              'mr-2 size-4 shrink-0',
+              modelValue === item.name ? 'opacity-100' : 'opacity-0',
+            )
+          "
         />
-        {{ item }}
+        <span
+          v-if="item.color"
+          class="mr-2 size-2.5 shrink-0 rounded-sm border border-border"
+          :style="{ backgroundColor: item.color }"
+        />
+        <span
+          v-else
+          class="border-muted-foreground/40 mr-2 inline-flex size-2.5 shrink-0 items-center justify-center rounded-sm border border-dashed"
+        />
+        {{ item.name }}
       </CommandItem>
     </CommandGroup>
 

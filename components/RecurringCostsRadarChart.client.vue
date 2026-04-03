@@ -13,20 +13,32 @@ const props = defineProps<{
   formatValue: (n: number) => string
 }>()
 
-const PALETTE_FALLBACK = [
-  'oklch(0.646 0.222 41.116)',
-  'oklch(0.6 0.118 184.704)',
-] as const
+/** Fallbacks = current `.dark` chart tokens from `assets/css/main.css` */
+const FALLBACK = {
+  chart1: 'oklch(0.6959 0.1491 162.4796)',
+  chart2: 'oklch(0.3717 0.0392 257.287)',
+  popover: 'oklch(0.1663 0.0262 269.3709)',
+  foreground: 'oklch(0.9683 0.0069 247.8956)',
+  border: 'oklch(0.2795 0.0368 260.031)',
+  mutedFg: 'oklch(0.7107 0.0351 256.7878)',
+} as const
 
-function resolveColors() {
-  if (typeof document === 'undefined') {
-    return { c1: PALETTE_FALLBACK[0]!, c2: PALETTE_FALLBACK[1]! }
-  }
-  const c1 = getComputedStyle(document.documentElement).getPropertyValue('--chart-1').trim()
-  const c2 = getComputedStyle(document.documentElement).getPropertyValue('--chart-2').trim()
+function themeVar(name: string, fallback: string) {
+  if (typeof document === 'undefined') return fallback
+  const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim()
+  return v || fallback
+}
+
+function resolveChartTheme() {
   return {
-    c1: c1 || PALETTE_FALLBACK[0]!,
-    c2: c2 || PALETTE_FALLBACK[1]!,
+    c1: themeVar('--chart-1', FALLBACK.chart1),
+    c2: themeVar('--chart-2', FALLBACK.chart2),
+    tooltipBg: themeVar('--popover', FALLBACK.popover),
+    tooltipFg: themeVar('--popover-foreground', FALLBACK.foreground),
+    tooltipBorder: themeVar('--border', FALLBACK.border),
+    legendFg: themeVar('--muted-foreground', FALLBACK.mutedFg),
+    axisFg: themeVar('--muted-foreground', FALLBACK.mutedFg),
+    line: themeVar('--border', FALLBACK.border),
   }
 }
 
@@ -47,7 +59,7 @@ function rebuild() {
   const maxCnt = Math.max(...counts, 1)
   const normAmt = amounts.map((a) => (a / maxAmt) * 100)
   const normCnt = counts.map((c) => (c / maxCnt) * 100)
-  const { c1, c2 } = resolveColors()
+  const t = resolveChartTheme()
 
   const fullNames = [...categories]
 
@@ -59,12 +71,12 @@ function rebuild() {
       trigger: 'item',
       confine: true,
       transitionDuration: 0,
-      backgroundColor: 'oklch(0.22 0 0)',
-      borderColor: 'oklch(1 0 0 / 12%)',
+      backgroundColor: t.tooltipBg,
+      borderColor: t.tooltipBorder,
       borderWidth: 1,
       padding: 10,
       textStyle: {
-        color: 'oklch(0.985 0 0)',
+        color: t.tooltipFg,
         fontSize: 12,
       },
       formatter: (p: unknown) => {
@@ -88,7 +100,7 @@ function rebuild() {
     legend: {
       bottom: 4,
       data: ['Kwota (PLN)', 'Liczba pozycji'],
-      textStyle: { color: 'oklch(0.708 0 0)', fontSize: 11 },
+      textStyle: { color: t.legendFg, fontSize: 11 },
       itemGap: 20,
       selectedMode: false,
     },
@@ -102,16 +114,16 @@ function rebuild() {
       shape: 'polygon',
       splitNumber: 5,
       axisName: {
-        color: 'oklch(0.708 0 0)',
+        color: t.axisFg,
         fontSize: 11,
         distance: 10,
       },
       splitLine: {
-        lineStyle: { color: 'oklch(1 0 0 / 12%)' },
+        lineStyle: { color: t.line },
       },
       splitArea: { show: false },
       axisLine: {
-        lineStyle: { color: 'oklch(1 0 0 / 12%)' },
+        lineStyle: { color: t.line },
       },
     },
     series: [
@@ -121,14 +133,14 @@ function rebuild() {
           {
             value: normAmt,
             name: 'Kwota (PLN)',
-            areaStyle: { color: c1, opacity: 0.6 },
-            lineStyle: { width: 2, color: c1 },
+            areaStyle: { color: t.c1, opacity: 0.6 },
+            lineStyle: { width: 2, color: t.c1 },
           },
           {
             value: normCnt,
             name: 'Liczba pozycji',
-            areaStyle: { color: c2, opacity: 1 },
-            lineStyle: { width: 2, color: c2 },
+            areaStyle: { color: t.c2, opacity: 1 },
+            lineStyle: { width: 2, color: t.c2 },
           },
         ],
         symbol: 'circle',

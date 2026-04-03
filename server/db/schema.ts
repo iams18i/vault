@@ -12,12 +12,21 @@ import {
 export const categories = pgTable("categories", {
   id: serial("id").primaryKey(),
   name: varchar("name", { length: 128 }).notNull().unique(),
+  /** `#RRGGBB` or null */
+  color: varchar("color", { length: 7 }),
+})
+
+export const companies = pgTable("companies", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 255 }).notNull().unique(),
 })
 
 export const monthlyIncome = pgTable("monthly_income", {
   id: serial("id").primaryKey(),
   month: varchar("month", { length: 7 }).notNull(),
-  company: varchar("company", { length: 255 }).notNull(),
+  companyId: integer("company_id")
+    .notNull()
+    .references(() => companies.id),
   type: varchar("type", { length: 20 }).notNull().$type<"hourly" | "ryczalt">(),
   hours: decimal("hours", { precision: 10, scale: 2 }),
   hourlyRate: decimal("hourly_rate", { precision: 14, scale: 2 }),

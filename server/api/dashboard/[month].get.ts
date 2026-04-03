@@ -1,5 +1,6 @@
 import { and, eq, gte, isNull, lte, or } from "drizzle-orm"
 import {
+  companies,
   invoices,
   monthlyExpenses,
   monthlyIncome,
@@ -32,8 +33,23 @@ export default defineEventHandler(async (event) => {
   const db = getDb()
 
   const incomeRows = await db
-    .select()
+    .select({
+      id: monthlyIncome.id,
+      month: monthlyIncome.month,
+      companyId: monthlyIncome.companyId,
+      company: companies.name,
+      type: monthlyIncome.type,
+      hours: monthlyIncome.hours,
+      hourlyRate: monthlyIncome.hourlyRate,
+      netAmount: monthlyIncome.netAmount,
+      vatExempt: monthlyIncome.vatExempt,
+      vatRatePercent: monthlyIncome.vatRatePercent,
+      vatAmount: monthlyIncome.vatAmount,
+      grossAmount: monthlyIncome.grossAmount,
+      notes: monthlyIncome.notes,
+    })
     .from(monthlyIncome)
+    .innerJoin(companies, eq(monthlyIncome.companyId, companies.id))
     .where(eq(monthlyIncome.month, monthParam))
     .orderBy(monthlyIncome.id)
 

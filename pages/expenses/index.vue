@@ -142,7 +142,7 @@ async function saveEdit() {
 </script>
 
 <template>
-  <div class="space-y-8 max-w-6xl">
+  <div class="space-y-8 max-w-7xl">
     <div class="flex flex-wrap items-end justify-between gap-4">
       <div>
         <h1 class="text-2xl font-semibold tracking-tight">Wydatki</h1>
@@ -150,8 +150,10 @@ async function saveEdit() {
           Jednorazowe w wybranym miesiącu
         </p>
       </div>
-      <div class="flex w-full flex-wrap items-end justify-end gap-4 sm:w-auto">
-        <div class="inline-flex gap-2 sm:w-44 sm:shrink-0">
+      <div
+        class="flex w-full flex-wrap items-end justify-end gap-6 sm:w-auto sm:gap-8"
+      >
+        <div class="flex w-full min-w-0 flex-col gap-2 sm:w-44 sm:shrink-0">
           <Label>Miesiąc</Label>
           <MonthPicker v-model="filterMonth" class="w-full" />
         </div>
@@ -171,12 +173,12 @@ async function saveEdit() {
             >
               <template v-if="showAppleShortcut">
                 <Kbd>⌘</Kbd>
-                <span class="text-muted-foreground text-xs font-medium">+</span>
+                <span class="text-inherit text-xs font-medium">+</span>
                 <Kbd>N</Kbd>
               </template>
               <template v-else>
                 <Kbd>Ctrl</Kbd>
-                <span class="text-muted-foreground text-xs font-medium">+</span>
+                <span class="text-inherit text-xs font-medium">+</span>
                 <Kbd>N</Kbd>
               </template>
             </KbdGroup>
@@ -218,9 +220,9 @@ async function saveEdit() {
               <TableCell class="text-right tabular-nums">{{
                 format(r.amount)
               }}</TableCell>
-              <TableCell class="text-muted-foreground">{{
-                r.category || '—'
-              }}</TableCell>
+              <TableCell>
+                <CategoryLabel :name="r.category" />
+              </TableCell>
               <TableCell class="text-muted-foreground">{{
                 r.expenseDate || '—'
               }}</TableCell>
@@ -274,10 +276,10 @@ async function saveEdit() {
               </div>
               <div class="grid gap-2 sm:col-span-2">
                 <Label for="exp-add-date">Data</Label>
-                <Input
+                <DatePickerField
                   id="exp-add-date"
                   v-model="form.expenseDate"
-                  type="date"
+                  placeholder="Brak daty"
                 />
               </div>
               <div class="grid gap-2 sm:col-span-2">
@@ -334,10 +336,10 @@ async function saveEdit() {
               </div>
               <div class="grid gap-2 sm:col-span-2">
                 <Label for="exp-edit-date">Data</Label>
-                <Input
+                <DatePickerField
                   id="exp-edit-date"
                   v-model="editForm.expenseDate"
-                  type="date"
+                  placeholder="Brak daty"
                 />
               </div>
               <div class="grid gap-2 sm:col-span-2">
