@@ -1,6 +1,8 @@
-import { recurringCosts } from "../../db/schema"
+import { recurringCosts } from '../../db/schema'
+import { requireVaultAuth } from '../../utils/vault-scope'
 
 export default defineEventHandler(async (event) => {
+  const { vaultId } = requireVaultAuth(event)
   const body = await readBody<{
     name: string
     amount: string
@@ -11,12 +13,13 @@ export default defineEventHandler(async (event) => {
     notes?: string | null
   }>(event)
   if (!body?.name || body.amount == null || !body.startDate) {
-    throw createError({ statusCode: 400, message: "name, amount, startDate required" })
+    throw createError({ statusCode: 400, message: 'name, amount, startDate required' })
   }
   const db = getDb()
   const [row] = await db
     .insert(recurringCosts)
     .values({
+      vaultId,
       name: body.name,
       amount: String(body.amount),
       category: body.category ?? null,

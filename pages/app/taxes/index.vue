@@ -3,10 +3,14 @@ import { onKeyStroke } from '@vueuse/core'
 
 import DatePickerField from '~/components/DatePickerField.vue'
 
+definePageMeta({ layout: 'default' })
+
 const { format } = useCurrency()
+const api = useApiFetch()
+const auth = useAuth()
 
 type Row = {
-  id: number
+  id: string
   name: string
   year: number
   month: number
@@ -53,13 +57,18 @@ onKeyStroke(
 async function load() {
   loading.value = true
   try {
-    rows.value = await $fetch("/api/tax-entries", { query: { year: year.value } })
+    rows.value = await api<Row[]>('/api/tax-entries', {
+      query: { year: String(year.value) },
+    })
   } finally {
     loading.value = false
   }
 }
 
 watch(year, load)
+watch(() => auth.currentVaultId.value, () => {
+  void load()
+})
 
 const form = reactive({
   name: "",
@@ -102,7 +111,7 @@ async function submitAdd() {
   addFormErrors.value = errs
   if (errs.length) return
   try {
-    await $fetch("/api/tax-entries", {
+    await api('/api/tax-entries', {
       method: "POST",
       body: {
         name: form.name.trim(),
@@ -141,9 +150,9 @@ onMounted(() => {
   showAppleShortcut.value = /Mac|iPhone|iPod|iPad/i.test(navigator.userAgent)
 })
 
-async function remove(id: number) {
-  if (!confirm("Usunąć?")) return
-  await $fetch(`/api/tax-entries/${id}`, { method: "DELETE" })
+async function remove(id: string) {
+  if (!confirm('Usunąć?')) return
+  await api(`/api/tax-entries/${id}`, { method: 'DELETE' })
   await load()
 }
 
@@ -205,8 +214,8 @@ const editDialogOpen = computed({
 async function saveEdit() {
   if (!editing.value || !editForm.name || !editForm.amountDue) return
   syncPaidWhenMarkedPaid()
-  await $fetch(`/api/tax-entries/${editing.value.id}`, {
-    method: "PUT",
+  await api(`/api/tax-entries/${editing.value.id}`, {
+    method: 'PUT',
     body: {
       name: editForm.name,
       year: editForm.year,

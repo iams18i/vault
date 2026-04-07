@@ -1,9 +1,14 @@
-import { eq } from "drizzle-orm"
-import { monthlyExpenses } from "../../db/schema"
+import { and, eq } from 'drizzle-orm'
+
+import { monthlyExpenses } from '../../db/schema'
+import { requireVaultAuth } from '../../utils/vault-scope'
 
 export default defineEventHandler(async (event) => {
-  const id = Number(getRouterParam(event, "id"))
-  if (!Number.isFinite(id)) throw createError({ statusCode: 400, message: "Invalid id" })
+  const id = getRouterParam(event, 'id')
+  if (!id) throw createError({ statusCode: 400, message: 'Invalid id' })
+
+  const { vaultId } = requireVaultAuth(event)
+
   const body = await readBody<{
     month?: string
     name?: string
@@ -23,8 +28,8 @@ export default defineEventHandler(async (event) => {
       ...(body.expenseDate !== undefined ? { expenseDate: body.expenseDate } : {}),
       ...(body.notes !== undefined ? { notes: body.notes } : {}),
     })
-    .where(eq(monthlyExpenses.id, id))
+    .where(and(eq(monthlyExpenses.id, id), eq(monthlyExpenses.vaultId, vaultId)))
     .returning()
-  if (!row) throw createError({ statusCode: 404, message: "Not found" })
+  if (!row) throw createError({ statusCode: 404, message: 'Not found' })
   return row
 })

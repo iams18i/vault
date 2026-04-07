@@ -1,7 +1,16 @@
 <script setup lang="ts">
 import { onKeyStroke } from '@vueuse/core'
 
-import type { ExpenseCategoryRow } from '~/composables/useCategoryColors'
+import {
+  useExpenseCategories,
+  type ExpenseCategoryRow,
+} from '~/composables/useCategoryColors'
+
+definePageMeta({ layout: 'default' })
+
+const api = useApiFetch()
+const auth = useAuth()
+const { refresh: refreshCategoriesCache } = useExpenseCategories()
 
 const rows = ref<ExpenseCategoryRow[]>([])
 const loading = ref(true)
@@ -35,11 +44,15 @@ onKeyStroke(
 async function load() {
   loading.value = true
   try {
-    rows.value = await $fetch<ExpenseCategoryRow[]>('/api/categories')
+    rows.value = await api<ExpenseCategoryRow[]>('/api/categories')
   } finally {
     loading.value = false
   }
 }
+
+watch(() => auth.currentVaultId.value, () => {
+  void load()
+})
 
 onMounted(() => {
   load()
@@ -65,7 +78,7 @@ async function saveEdit() {
   const name = editName.value.trim()
   if (!name) return
   try {
-    await $fetch(`/api/categories/${editing.value.id}`, {
+    await api(`/api/categories/${editing.value.id}`, {
       method: 'PUT',
       body: {
         name,
@@ -79,20 +92,20 @@ async function saveEdit() {
   }
   editOpen.value = false
   editing.value = null
-  await refreshNuxtData('expense-categories')
+  await refreshCategoriesCache()
   await load()
 }
 
 async function removeRow(row: ExpenseCategoryRow) {
   if (!confirm(`Usunąć kategorię „${row.name}”?`)) return
   try {
-    await $fetch(`/api/categories/${row.id}`, { method: 'DELETE' })
+    await api(`/api/categories/${row.id}`, { method: 'DELETE' })
   } catch (e: unknown) {
     const err = e as { data?: { message?: string }; message?: string }
     alert(err?.data?.message ?? err?.message ?? 'Błąd usuwania')
     return
   }
-  await refreshNuxtData('expense-categories')
+  await refreshCategoriesCache()
   await load()
 }
 
@@ -100,7 +113,7 @@ async function saveAdd() {
   const name = addName.value.trim()
   if (!name) return
   try {
-    await $fetch('/api/categories', {
+    await api('/api/categories', {
       method: 'POST',
       body: {
         name,
@@ -113,7 +126,7 @@ async function saveAdd() {
     return
   }
   addOpen.value = false
-  await refreshNuxtData('expense-categories')
+  await refreshCategoriesCache()
   await load()
 }
 

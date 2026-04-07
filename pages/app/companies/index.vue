@@ -1,7 +1,16 @@
 <script setup lang="ts">
 import { onKeyStroke } from '@vueuse/core'
 
-import type { IncomeCompanyRow } from '~/composables/useIncomeCompanies'
+import {
+  useIncomeCompanies,
+  type IncomeCompanyRow,
+} from '~/composables/useIncomeCompanies'
+
+definePageMeta({ layout: 'default' })
+
+const api = useApiFetch()
+const auth = useAuth()
+const { refresh: refreshCompaniesCache } = useIncomeCompanies()
 
 const rows = ref<IncomeCompanyRow[]>([])
 const loading = ref(true)
@@ -41,13 +50,16 @@ onKeyStroke(
 async function load() {
   loading.value = true
   try {
-    rows.value = await $fetch<IncomeCompanyRow[]>('/api/companies')
+    rows.value = await api<IncomeCompanyRow[]>('/api/companies')
   } finally {
     loading.value = false
   }
 }
 
 watch(() => route.query.add, consumeAddQuery)
+watch(() => auth.currentVaultId.value, () => {
+  void load()
+})
 
 onMounted(() => {
   load()
@@ -70,7 +82,7 @@ async function saveEdit() {
   const name = editName.value.trim()
   if (!name) return
   try {
-    await $fetch(`/api/companies/${editing.value.id}`, {
+    await api(`/api/companies/${editing.value.id}`, {
       method: 'PUT',
       body: { name },
     })
@@ -81,20 +93,20 @@ async function saveEdit() {
   }
   editOpen.value = false
   editing.value = null
-  await refreshNuxtData('income-companies')
+  await refreshCompaniesCache()
   await load()
 }
 
 async function removeRow(row: IncomeCompanyRow) {
   if (!confirm(`Usunąć kontrahenta „${row.name}”?`)) return
   try {
-    await $fetch(`/api/companies/${row.id}`, { method: 'DELETE' })
+    await api(`/api/companies/${row.id}`, { method: 'DELETE' })
   } catch (e: unknown) {
     const err = e as { data?: { message?: string }; message?: string }
     alert(err?.data?.message ?? err?.message ?? 'Błąd usuwania')
     return
   }
-  await refreshNuxtData('income-companies')
+  await refreshCompaniesCache()
   await load()
 }
 
@@ -102,7 +114,7 @@ async function saveAdd() {
   const name = addName.value.trim()
   if (!name) return
   try {
-    await $fetch('/api/companies', {
+    await api('/api/companies', {
       method: 'POST',
       body: { name },
     })
@@ -112,7 +124,7 @@ async function saveAdd() {
     return
   }
   addOpen.value = false
-  await refreshNuxtData('income-companies')
+  await refreshCompaniesCache()
   await load()
 }
 </script>

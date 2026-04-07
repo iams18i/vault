@@ -1,9 +1,14 @@
-import { eq } from "drizzle-orm"
-import { taxEntries } from "../../db/schema"
+import { and, eq } from 'drizzle-orm'
+
+import { taxEntries } from '../../db/schema'
+import { requireVaultAuth } from '../../utils/vault-scope'
 
 export default defineEventHandler(async (event) => {
-  const id = Number(getRouterParam(event, "id"))
-  if (!Number.isFinite(id)) throw createError({ statusCode: 400, message: "Invalid id" })
+  const id = getRouterParam(event, 'id')
+  if (!id) throw createError({ statusCode: 400, message: 'Invalid id' })
+
+  const { vaultId } = requireVaultAuth(event)
+
   const body = await readBody<{
     name?: string
     year?: number
@@ -11,7 +16,7 @@ export default defineEventHandler(async (event) => {
     amountDue?: string
     amountPaid?: string
     dueDate?: string | null
-    status?: "pending" | "paid" | "partial"
+    status?: 'pending' | 'paid' | 'partial'
     notes?: string | null
   }>(event)
   const db = getDb()
@@ -27,8 +32,8 @@ export default defineEventHandler(async (event) => {
       ...(body.status != null ? { status: body.status } : {}),
       ...(body.notes !== undefined ? { notes: body.notes } : {}),
     })
-    .where(eq(taxEntries.id, id))
+    .where(and(eq(taxEntries.id, id), eq(taxEntries.vaultId, vaultId)))
     .returning()
-  if (!row) throw createError({ statusCode: 404, message: "Not found" })
+  if (!row) throw createError({ statusCode: 404, message: 'Not found' })
   return row
 })

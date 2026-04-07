@@ -1,5 +1,5 @@
 export type ExpenseCategoryRow = {
-  id: number
+  id: string
   name: string
   color: string | null
 }
@@ -8,8 +8,18 @@ export type ExpenseCategoryRow = {
 export type CategoryListItem = { name: string; color: string | null }
 
 export function useExpenseCategories() {
-  return useAsyncData('expense-categories', () =>
-    $fetch<ExpenseCategoryRow[]>('/api/categories'),
+  const auth = useAuth()
+  const key = computed(
+    () => `expense-categories:${auth.currentVaultId.value ?? 'none'}`,
+  )
+  return useAsyncData(
+    key,
+    () => {
+      if (!auth.currentVaultId.value) return Promise.resolve([])
+      const api = useApiFetch()
+      return api<ExpenseCategoryRow[]>('/api/categories')
+    },
+    { server: false, watch: [key] },
   )
 }
 

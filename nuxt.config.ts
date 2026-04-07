@@ -48,5 +48,10 @@ export default defineNuxtConfig({
   },
   runtimeConfig: {
     databaseUrl: process.env.DATABASE_URL ?? '',
+    jwtSecret: process.env.JWT_SECRET ?? '',
+    resendApiKey: process.env.RESEND_API_KEY ?? '',
+    appUrl: process.env.APP_URL ?? 'http://localhost:3000',
+    resendFromEmail:
+      process.env.RESEND_FROM_EMAIL ?? 'Vault <onboarding@resend.dev>',
   },
 })

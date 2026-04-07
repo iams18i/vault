@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 
 import { companies, monthlyIncome } from '../../db/schema'
 import {
@@ -6,13 +6,17 @@ import {
   computeStoredVatFields,
   resolveVatRatePercent,
 } from '../../utils/monthly-income'
+import { requireVaultAuth } from '../../utils/vault-scope'
 
 export default defineEventHandler(async (event) => {
-  const id = Number(getRouterParam(event, 'id'))
-  if (!Number.isFinite(id)) throw createError({ statusCode: 400, message: 'Invalid id' })
+  const id = getRouterParam(event, 'id')
+  if (!id) throw createError({ statusCode: 400, message: 'Invalid id' })
+
+  const { vaultId } = requireVaultAuth(event)
+
   const body = await readBody<{
     month?: string
-    companyId?: number
+    companyId?: string
     type?: 'hourly' | 'ryczalt'
     hours?: string | null
     hourlyRate?: string | null
@@ -25,17 +29,21 @@ export default defineEventHandler(async (event) => {
   const [existing] = await db
     .select()
     .from(monthlyIncome)
-    .where(eq(monthlyIncome.id, id))
+    .where(and(eq(monthlyIncome.id, id), eq(monthlyIncome.vaultId, vaultId)))
     .limit(1)
   if (!existing) throw createError({ statusCode: 404, message: 'Not found' })
 
   let companyId = existing.companyId
   if (body.companyId !== undefined) {
-    const next = Number(body.companyId)
-    if (!Number.isFinite(next)) {
+    const next = body.companyId.trim()
+    if (!next) {
       throw createError({ statusCode: 400, message: 'Invalid companyId' })
     }
-    const [co] = await db.select().from(companies).where(eq(companies.id, next)).limit(1)
+    const [co] = await db
+      .select()
+      .from(companies)
+      .where(and(eq(companies.id, next), eq(companies.vaultId, vaultId)))
+      .limit(1)
     if (!co) {
       throw createError({ statusCode: 400, message: 'companyId not found' })
     }
@@ -82,7 +90,7 @@ export default defineEventHandler(async (event) => {
       ...vatFields,
       ...(body.notes !== undefined ? { notes: body.notes } : {}),
     })
-    .where(eq(monthlyIncome.id, id))
+    .where(and(eq(monthlyIncome.id, id), eq(monthlyIncome.vaultId, vaultId)))
 
   const [withName] = await db
     .select({
@@ -102,7 +110,7 @@ export default defineEventHandler(async (event) => {
     })
     .from(monthlyIncome)
     .innerJoin(companies, eq(monthlyIncome.companyId, companies.id))
-    .where(eq(monthlyIncome.id, id))
+    .where(and(eq(monthlyIncome.id, id), eq(monthlyIncome.vaultId, vaultId)))
     .limit(1)
 
   if (!withName) throw createError({ statusCode: 404, message: 'Not found' })

@@ -1,17 +1,29 @@
 <script setup lang="ts">
-import { Search } from 'lucide-vue-next'
+import { LogOut, Search, User } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import Kbd from '@/components/ui/kbd/Kbd.vue'
 import { SidebarTrigger } from '@/components/ui/sidebar'
 import CommandMenu from '~/components/CommandMenu.vue'
 import ThemeToggle from '~/components/ThemeToggle.vue'
 
 const { openPalette } = useCommandPalette()
+const auth = useAuth()
 
 const shortcutLabel = ref('Ctrl+K')
 
 onMounted(() => {
-  shortcutLabel.value = /Mac|iPhone|iPod|iPad/i.test(navigator.platform) ? '⌘K' : 'Ctrl+K'
+  shortcutLabel.value = /Mac|iPhone|iPod|iPad/i.test(navigator.platform)
+    ? '⌘K'
+    : 'Ctrl+K'
+  auth.hydrateFromStorage()
 })
 </script>
 
@@ -33,6 +45,28 @@ onMounted(() => {
         </span>
       </Button>
       <ThemeToggle />
+      <DropdownMenu>
+        <DropdownMenuTrigger as-child>
+          <Button variant="outline" size="icon" class="shrink-0" aria-label="Konto">
+            <User class="size-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" class="w-56">
+          <DropdownMenuLabel class="font-normal">
+            <div class="flex flex-col space-y-1">
+              <p class="text-sm font-medium leading-none">Konto</p>
+              <p class="text-muted-foreground truncate text-xs leading-none">
+                {{ auth.user.value?.email ?? '—' }}
+              </p>
+            </div>
+          </DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem class="cursor-pointer" @click="auth.logout()">
+            <LogOut class="mr-2 size-4" />
+            Wyloguj
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
       <CommandMenu />
     </div>
   </header>

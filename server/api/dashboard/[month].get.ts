@@ -1,4 +1,5 @@
-import { and, eq, gte, isNull, lte, or } from "drizzle-orm"
+import { and, eq, gte, isNull, lte, or } from 'drizzle-orm'
+
 import {
   companies,
   invoices,
@@ -6,8 +7,9 @@ import {
   monthlyIncome,
   recurringCosts,
   taxEntries,
-} from "../../db/schema"
-import { num } from "../../utils/parse"
+} from '../../db/schema'
+import { num } from '../../utils/parse'
+import { requireVaultAuth } from '../../utils/vault-scope'
 
 /** Tax entries whose name references VAT — merged into dashboard „VAT (z dochodu)” for paid/due tracking. */
 function isVatTaxEntryName(name: string): boolean {
@@ -16,19 +18,20 @@ function isVatTaxEntryName(name: string): boolean {
 
 function parseMonth(ym: string) {
   const m = /^(\d{4})-(\d{2})$/.exec(ym)
-  if (!m) throw createError({ statusCode: 400, message: "month must be YYYY-MM" })
+  if (!m) throw createError({ statusCode: 400, message: 'month must be YYYY-MM' })
   const y = Number(m[1])
   const mo = Number(m[2])
-  if (mo < 1 || mo > 12) throw createError({ statusCode: 400, message: "Invalid month" })
-  const firstDay = `${y}-${String(mo).padStart(2, "0")}-01`
+  if (mo < 1 || mo > 12) throw createError({ statusCode: 400, message: 'Invalid month' })
+  const firstDay = `${y}-${String(mo).padStart(2, '0')}-01`
   const last = new Date(y, mo, 0)
-  const lastDay = `${y}-${String(mo).padStart(2, "0")}-${String(last.getDate()).padStart(2, "0")}`
+  const lastDay = `${y}-${String(mo).padStart(2, '0')}-${String(last.getDate()).padStart(2, '0')}`
   return { y, mo, firstDay, lastDay }
 }
 
 export default defineEventHandler(async (event) => {
-  const monthParam = getRouterParam(event, "month")
-  if (!monthParam) throw createError({ statusCode: 400, message: "month required" })
+  const { vaultId } = requireVaultAuth(event)
+  const monthParam = getRouterParam(event, 'month')
+  if (!monthParam) throw createError({ statusCode: 400, message: 'month required' })
   const { y, mo, firstDay, lastDay } = parseMonth(monthParam)
   const db = getDb()
 
@@ -50,7 +53,13 @@ export default defineEventHandler(async (event) => {
     })
     .from(monthlyIncome)
     .innerJoin(companies, eq(monthlyIncome.companyId, companies.id))
-    .where(eq(monthlyIncome.month, monthParam))
+    .where(
+      and(
+        eq(monthlyIncome.vaultId, vaultId),
+        eq(companies.vaultId, vaultId),
+        eq(monthlyIncome.month, monthParam),
+      ),
+    )
     .orderBy(monthlyIncome.id)
 
   const netIncome = Math.round(incomeRows.reduce((s, r) => s + num(r.netAmount), 0) * 100) / 100
@@ -61,7 +70,11 @@ export default defineEventHandler(async (event) => {
     .select()
     .from(recurringCosts)
     .where(
-      and(lte(recurringCosts.startDate, lastDay), or(isNull(recurringCosts.endDate), gte(recurringCosts.endDate, firstDay))),
+      and(
+        eq(recurringCosts.vaultId, vaultId),
+        lte(recurringCosts.startDate, lastDay),
+        or(isNull(recurringCosts.endDate), gte(recurringCosts.endDate, firstDay)),
+      ),
     )
 
   const recurringTotal = recurringRows.reduce((s, r) => s + num(r.amount), 0)
@@ -69,18 +82,29 @@ export default defineEventHandler(async (event) => {
   const expenseRows = await db
     .select()
     .from(monthlyExpenses)
-    .where(eq(monthlyExpenses.month, monthParam))
+    .where(
+      and(eq(monthlyExpenses.vaultId, vaultId), eq(monthlyExpenses.month, monthParam)),
+    )
 
   const expensesTotal = expenseRows.reduce((s, r) => s + num(r.amount), 0)
 
-  const invoiceRows = await db.select().from(invoices).where(eq(invoices.month, monthParam))
+  const invoiceRows = await db
+    .select()
+    .from(invoices)
+    .where(and(eq(invoices.vaultId, vaultId), eq(invoices.month, monthParam)))
 
   const invoicesTotal = invoiceRows.reduce((s, r) => s + num(r.grossAmount), 0)
 
   const taxRows = await db
     .select()
     .from(taxEntries)
-    .where(and(eq(taxEntries.year, y), eq(taxEntries.month, mo)))
+    .where(
+      and(
+        eq(taxEntries.vaultId, vaultId),
+        eq(taxEntries.year, y),
+        eq(taxEntries.month, mo),
+      ),
+    )
 
   const vatEntryRows = taxRows.filter((t) => isVatTaxEntryName(t.name))
   const otherTaxRows = taxRows.filter((t) => !isVatTaxEntryName(t.name))
@@ -88,17 +112,17 @@ export default defineEventHandler(async (event) => {
   const vatPaidFromEntries = Math.round(vatEntryRows.reduce((s, t) => s + num(t.amountPaid), 0) * 100) / 100
   const vatDueFromIncome = incomeVatTotal
   const vatRemaining = Math.round((vatDueFromIncome - vatPaidFromEntries) * 100) / 100
-  const vatStatus: "pending" | "paid" | "partial" =
+  const vatStatus: 'pending' | 'paid' | 'partial' =
     vatPaidFromEntries <= 0
-      ? "pending"
+      ? 'pending'
       : vatRemaining <= 0
-        ? "paid"
-        : "partial"
+        ? 'paid'
+        : 'partial'
 
   const syntheticVat = {
-    id: "vat-from-income" as const,
+    id: 'vat-from-income' as const,
     synthetic: true,
-    name: "VAT (z dochodu)",
+    name: 'VAT (z dochodu)',
     amountDue: vatDueFromIncome,
     amountPaid: vatPaidFromEntries,
     remaining: vatRemaining,

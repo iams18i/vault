@@ -1,6 +1,7 @@
 import { and, eq } from 'drizzle-orm'
 
 import { companies, monthlyIncome } from '../../db/schema'
+import { requireVaultAuth } from '../../utils/vault-scope'
 
 const incomeSelect = {
   id: monthlyIncome.id,
@@ -19,9 +20,10 @@ const incomeSelect = {
 }
 
 export default defineEventHandler(async (event) => {
+  const { vaultId } = requireVaultAuth(event)
   const q = getQuery(event)
   const month = q.month as string | undefined
-  const companyIdNum = Number(q.companyId as string | undefined)
+  const companyId = q.companyId as string | undefined
 
   const db = getDb()
   const base = db
@@ -29,17 +31,14 @@ export default defineEventHandler(async (event) => {
     .from(monthlyIncome)
     .innerJoin(companies, eq(monthlyIncome.companyId, companies.id))
 
-  const conditions = []
+  const conditions = [
+    eq(monthlyIncome.vaultId, vaultId),
+    eq(companies.vaultId, vaultId),
+  ]
   if (month) conditions.push(eq(monthlyIncome.month, month))
-  if (Number.isFinite(companyIdNum)) {
-    conditions.push(eq(monthlyIncome.companyId, companyIdNum))
+  if (companyId?.trim()) {
+    conditions.push(eq(monthlyIncome.companyId, companyId.trim()))
   }
 
-  if (conditions.length === 0) {
-    return base.orderBy(monthlyIncome.id)
-  }
-  if (conditions.length === 1) {
-    return base.where(conditions[0]).orderBy(monthlyIncome.id)
-  }
   return base.where(and(...conditions)).orderBy(monthlyIncome.id)
 })
