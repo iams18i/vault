@@ -9,6 +9,25 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U expenses -d expenses']
+      interval: 2s
+      timeout: 5s
+      retries: 15
+      start_period: 5s
+
+  # Runs drizzle-kit migrate once, then exits (0 = app can start)
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: migrate
+    environment:
+      DATABASE_URL: postgres://expenses:expenses@db:5432/expenses
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: 'no'
 
   app:
     build: .
@@ -21,7 +40,10 @@ services:
       NITRO_HOST: 0.0.0.0
       PORT: 3000
     depends_on:
-      - db
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
 
 volumes:
   pgdata:

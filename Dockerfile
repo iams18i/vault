@@ -6,6 +6,13 @@ FROM base AS deps
 COPY package.json pnpm-lock.yaml* ./
 RUN pnpm install --frozen-lockfile
 
+# One-shot DB migrations (use: docker compose run --rm migrate, or depends_on in compose)
+FROM base AS migrate
+COPY --from=deps /app/node_modules ./node_modules
+COPY package.json pnpm-lock.yaml drizzle.config.ts ./
+COPY server/db ./server/db
+CMD ["pnpm", "exec", "drizzle-kit", "migrate"]
+
 FROM base AS builder
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
