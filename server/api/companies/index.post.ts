@@ -1,8 +1,10 @@
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 
 import { companies } from '../../db/schema'
+import { requireVaultAuth } from '../../utils/vault-scope'
 
 export default defineEventHandler(async (event) => {
+  const { vaultId } = requireVaultAuth(event)
   const body = await readBody<{ name?: string | null }>(event)
   const raw = body.name?.trim() ?? ''
   if (!raw) {
@@ -17,14 +19,25 @@ export default defineEventHandler(async (event) => {
 
   const db = getDb()
 
-  const [existing] = await db.select().from(companies).where(eq(companies.name, raw)).limit(1)
+  const [existing] = await db
+    .select()
+    .from(companies)
+    .where(and(eq(companies.vaultId, vaultId), eq(companies.name, raw)))
+    .limit(1)
   if (existing) return existing
 
   try {
-    const [row] = await db.insert(companies).values({ name: raw }).returning()
+    const [row] = await db
+      .insert(companies)
+      .values({ name: raw, vaultId })
+      .returning()
     return row
   } catch {
-    const [again] = await db.select().from(companies).where(eq(companies.name, raw)).limit(1)
+    const [again] = await db
+      .select()
+      .from(companies)
+      .where(and(eq(companies.vaultId, vaultId), eq(companies.name, raw)))
+      .limit(1)
     if (again) return again
     throw createError({ statusCode: 500, message: 'Failed to create company' })
   }

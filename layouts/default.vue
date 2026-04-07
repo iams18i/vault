@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import {
   Building2,
+  Check,
+  ChevronDown,
   FileText,
   Landmark,
   LayoutDashboard,
@@ -10,6 +12,14 @@ import {
   TrendingUp,
 } from 'lucide-vue-next'
 import AppHeader from '~/components/AppHeader.vue'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import {
   Sidebar,
   SidebarContent,
@@ -25,21 +35,33 @@ import {
 } from '@/components/ui/sidebar'
 
 const route = useRoute()
+const auth = useAuth()
+
+onMounted(() => {
+  auth.hydrateFromStorage()
+})
 
 const links = [
-  { to: '/', label: 'Pulpit', icon: LayoutDashboard },
-  { to: '/income', label: 'Dochód', icon: TrendingUp },
-  { to: '/recurring-costs', label: 'Koszty stałe', icon: Repeat },
-  { to: '/expenses', label: 'Wydatki', icon: Receipt },
-  { to: '/categories', label: 'Kategorie', icon: Tags },
-  { to: '/companies', label: 'Kontrahenci', icon: Building2 },
-  { to: '/invoices', label: 'Faktury', icon: FileText },
-  { to: '/taxes', label: 'Podatki', icon: Landmark },
+  { to: '/app', label: 'Pulpit', icon: LayoutDashboard },
+  { to: '/app/income', label: 'Dochód', icon: TrendingUp },
+  { to: '/app/recurring-costs', label: 'Koszty stałe', icon: Repeat },
+  { to: '/app/expenses', label: 'Wydatki', icon: Receipt },
+  { to: '/app/categories', label: 'Kategorie', icon: Tags },
+  { to: '/app/companies', label: 'Kontrahenci', icon: Building2 },
+  { to: '/app/invoices', label: 'Faktury', icon: FileText },
+  { to: '/app/taxes', label: 'Podatki', icon: Landmark },
 ] as const
 
 function linkActive(to: string) {
-  return to === '/' ? route.path === '/' : route.path.startsWith(to)
+  if (to === '/app')
+    return route.path === '/app' || route.path === '/app/'
+  return route.path === to || route.path.startsWith(`${to}/`)
 }
+
+const currentVaultName = computed(() => {
+  const id = auth.currentVaultId.value
+  return auth.vaults.value.find((v) => v.id === id)?.name ?? 'Przestrzeń'
+})
 </script>
 
 <template>
@@ -48,19 +70,54 @@ function linkActive(to: string) {
       <SidebarHeader class="border-b border-sidebar-border gap-0.5 p-2">
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton size="lg" as-child tooltip="Vault">
-              <NuxtLink to="/">
-                <div
-                  class="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground"
+            <DropdownMenu>
+              <DropdownMenuTrigger as-child>
+                <SidebarMenuButton
+                  size="lg"
+                  class="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
                 >
-                  <LayoutDashboard class="size-4" />
-                </div>
-                <div class="grid flex-1 text-left text-sm leading-tight">
-                  <span class="truncate font-semibold">Vault</span>
-                  <span class="truncate text-xs text-muted-foreground">PLN · lokalnie</span>
-                </div>
-              </NuxtLink>
-            </SidebarMenuButton>
+                  <div
+                    class="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground"
+                  >
+                    <LayoutDashboard class="size-4" />
+                  </div>
+                  <div class="grid min-w-0 flex-1 text-left text-sm leading-tight">
+                    <span class="truncate font-semibold">{{
+                      currentVaultName
+                    }}</span>
+                    <span class="truncate text-xs text-muted-foreground"
+                      >Przełącz przestrzeń</span
+                    >
+                  </div>
+                  <ChevronDown class="ml-auto size-4 opacity-50" />
+                </SidebarMenuButton>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent class="w-56" align="start" side="bottom">
+                <DropdownMenuLabel>Przestrzenie</DropdownMenuLabel>
+                <DropdownMenuItem
+                  v-for="v in auth.vaults.value"
+                  :key="v.id"
+                  class="cursor-pointer"
+                  @click="auth.switchVault(v.id)"
+                >
+                  <Check
+                    class="size-4"
+                    :class="
+                      auth.currentVaultId.value === v.id
+                        ? 'opacity-100'
+                        : 'opacity-0'
+                    "
+                  />
+                  <span class="truncate">{{ v.name }}</span>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem as-child>
+                  <NuxtLink to="/" class="cursor-pointer">
+                    Strona główna
+                  </NuxtLink>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>

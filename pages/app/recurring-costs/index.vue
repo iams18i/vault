@@ -6,11 +6,15 @@ import DatePickerField from '~/components/DatePickerField.vue'
 import { cn } from '@/lib/utils'
 import type { DatePickerPreset } from '~/types/date-picker-preset'
 
+definePageMeta({ layout: 'default' })
+
 const { format } = useCurrency()
 const { currentYm } = useMonth()
+const api = useApiFetch()
+const auth = useAuth()
 
 type Row = {
-  id: number
+  id: string
   name: string
   amount: string
   category: string | null
@@ -57,13 +61,16 @@ async function load() {
   loading.value = true
   try {
     const q = filterCategory.value ? { category: filterCategory.value } : {}
-    rows.value = await $fetch<Row[]>('/api/recurring-costs', { query: q })
+    rows.value = await api<Row[]>('/api/recurring-costs', { query: q })
   } finally {
     loading.value = false
   }
 }
 
 watch(filterCategory, load)
+watch(() => auth.currentVaultId.value, () => {
+  void load()
+})
 watch(addDialogOpen, (open) => {
   if (open) addFormErrors.value = []
 })
@@ -161,7 +168,7 @@ async function submitAdd() {
   addFormErrors.value = errs
   if (errs.length) return
   try {
-    await $fetch('/api/recurring-costs', {
+    await api('/api/recurring-costs', {
       method: 'POST',
       body: {
         name: form.name,
@@ -187,9 +194,9 @@ async function submitAdd() {
   }
 }
 
-async function remove(id: number) {
+async function remove(id: string) {
   if (!confirm('Usunąć?')) return
-  await $fetch(`/api/recurring-costs/${id}`, { method: 'DELETE' })
+  await api(`/api/recurring-costs/${id}`, { method: 'DELETE' })
   await load()
 }
 
@@ -287,7 +294,7 @@ async function saveEdit() {
     !editForm.startDate
   )
     return
-  await $fetch(`/api/recurring-costs/${editing.value.id}`, {
+  await api(`/api/recurring-costs/${editing.value.id}`, {
     method: 'PUT',
     body: {
       name: editForm.name,

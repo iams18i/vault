@@ -11,16 +11,20 @@ import {
 import { useAutoGrowTextarea } from '~/composables/useAutoGrowTextarea'
 import { fromYm, toYm } from '~/lib/month'
 
+definePageMeta({ layout: 'default' })
+
 const { format } = useCurrency()
 const { currentYm } = useMonth()
+const apiFetch = useApiFetch()
+const auth = useAuth()
 
 const route = useRoute()
 const router = useRouter()
 
 type Row = {
-  id: number
+  id: string
   month: string
-  companyId: number
+  companyId: string
   company: string
   type: 'hourly' | 'ryczalt'
   hours: string | null
@@ -34,7 +38,7 @@ type Row = {
 }
 
 const filterMonth = ref(fromYm(currentYm()))
-const filterCompanyId = ref<number | null>(null)
+const filterCompanyId = ref<string | null>(null)
 
 const selectedMonthLabel = computed(() => {
   const s = filterMonth.value.toLocaleDateString('pl-PL', {
@@ -85,7 +89,7 @@ onKeyStroke(
 )
 
 const form = reactive({
-  companyId: null as number | null,
+  companyId: null as string | null,
   type: 'hourly' as 'hourly' | 'ryczalt',
   hours: '',
   hourlyRate: '',
@@ -122,13 +126,16 @@ async function load() {
     if (filterCompanyId.value != null) {
       q.companyId = String(filterCompanyId.value)
     }
-    rows.value = await $fetch<Row[]>('/api/monthly-income', { query: q })
+    rows.value = await apiFetch<Row[]>('/api/monthly-income', { query: q })
   } finally {
     loading.value = false
   }
 }
 
 watch([filterMonth, filterCompanyId], load)
+watch(() => auth.currentVaultId.value, () => {
+  void load()
+})
 watch(() => route.query.add, consumeAddQuery)
 watch(addDialogOpen, (open) => {
   if (open) {
@@ -181,7 +188,7 @@ async function submitAdd() {
   if (errs.length) return
   const vat = vatSelectToPayload(formVatSelect.value)
   try {
-    await $fetch('/api/monthly-income', {
+    await apiFetch('/api/monthly-income', {
       method: 'POST',
       body: {
         month: toYm(filterMonth.value),
@@ -209,15 +216,15 @@ async function submitAdd() {
   }
 }
 
-async function remove(id: number) {
+async function remove(id: string) {
   if (!confirm('Usunąć wpis?')) return
-  await $fetch(`/api/monthly-income/${id}`, { method: 'DELETE' })
+  await apiFetch(`/api/monthly-income/${id}`, { method: 'DELETE' })
   await load()
 }
 
 const editing = ref<Row | null>(null)
 const editForm = reactive({
-  companyId: null as number | null,
+  companyId: null as string | null,
   type: 'hourly' as 'hourly' | 'ryczalt',
   hours: '',
   hourlyRate: '',
@@ -263,7 +270,7 @@ async function saveEdit() {
   }
   const vat = vatSelectToPayload(editVatSelect.value)
   try {
-    await $fetch(`/api/monthly-income/${editing.value.id}`, {
+    await apiFetch(`/api/monthly-income/${editing.value.id}`, {
       method: 'PUT',
       body: {
         companyId: editForm.companyId,

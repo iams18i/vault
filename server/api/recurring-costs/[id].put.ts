@@ -1,9 +1,14 @@
-import { eq } from "drizzle-orm"
-import { recurringCosts } from "../../db/schema"
+import { and, eq } from 'drizzle-orm'
+
+import { recurringCosts } from '../../db/schema'
+import { requireVaultAuth } from '../../utils/vault-scope'
 
 export default defineEventHandler(async (event) => {
-  const id = Number(getRouterParam(event, "id"))
-  if (!Number.isFinite(id)) throw createError({ statusCode: 400, message: "Invalid id" })
+  const id = getRouterParam(event, 'id')
+  if (!id) throw createError({ statusCode: 400, message: 'Invalid id' })
+
+  const { vaultId } = requireVaultAuth(event)
+
   const body = await readBody<{
     name?: string
     amount?: string
@@ -25,8 +30,8 @@ export default defineEventHandler(async (event) => {
       ...(body.dayOfMonth != null ? { dayOfMonth: body.dayOfMonth } : {}),
       ...(body.notes !== undefined ? { notes: body.notes } : {}),
     })
-    .where(eq(recurringCosts.id, id))
+    .where(and(eq(recurringCosts.id, id), eq(recurringCosts.vaultId, vaultId)))
     .returning()
-  if (!row) throw createError({ statusCode: 404, message: "Not found" })
+  if (!row) throw createError({ statusCode: 404, message: 'Not found' })
   return row
 })

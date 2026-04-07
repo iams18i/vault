@@ -27,33 +27,33 @@ const colorMode = useColorMode()
 const { open, closePalette } = useCommandPalette()
 
 const navLinks = [
-  { to: '/', label: 'Pulpit', icon: LayoutDashboard },
-  { to: '/income', label: 'Dochód', icon: TrendingUp },
-  { to: '/recurring-costs', label: 'Koszty stałe', icon: Repeat },
-  { to: '/expenses', label: 'Wydatki', icon: Receipt },
-  { to: '/categories', label: 'Kategorie', icon: Tags },
-  { to: '/companies', label: 'Kontrahenci', icon: Building2 },
-  { to: '/invoices', label: 'Faktury', icon: FileText },
-  { to: '/taxes', label: 'Podatki', icon: Landmark },
+  { to: '/app', label: 'Pulpit', icon: LayoutDashboard },
+  { to: '/app/income', label: 'Dochód', icon: TrendingUp },
+  { to: '/app/recurring-costs', label: 'Koszty stałe', icon: Repeat },
+  { to: '/app/expenses', label: 'Wydatki', icon: Receipt },
+  { to: '/app/categories', label: 'Kategorie', icon: Tags },
+  { to: '/app/companies', label: 'Kontrahenci', icon: Building2 },
+  { to: '/app/invoices', label: 'Faktury', icon: FileText },
+  { to: '/app/taxes', label: 'Podatki', icon: Landmark },
 ] as const
 
 const quickActions = [
-  { to: '/expenses', label: 'Nowy wydatek', icon: Receipt },
+  { to: '/app/expenses', label: 'Nowy wydatek', icon: Receipt },
   {
-    to: '/income',
+    to: '/app/income',
     label: 'Nowy dochód',
     icon: TrendingUp,
     query: { add: '1' } as Record<string, string>,
   },
-  { to: '/categories', label: 'Nowa kategoria', icon: Tags },
+  { to: '/app/categories', label: 'Nowa kategoria', icon: Tags },
   {
-    to: '/companies',
+    to: '/app/companies',
     label: 'Nowy kontrahent',
     icon: Building2,
     query: { add: '1' } as Record<string, string>,
   },
-  { to: '/invoices', label: 'Nowa faktura', icon: FileText },
-  { to: '/taxes', label: 'Nowe podatki', icon: Landmark },
+  { to: '/app/invoices', label: 'Nowa faktura', icon: FileText },
+  { to: '/app/taxes', label: 'Nowe podatki', icon: Landmark },
 ] as const
 
 function run(fn: () => void) {

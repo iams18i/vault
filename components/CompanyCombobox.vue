@@ -10,7 +10,7 @@ import {
 
 const props = withDefaults(
   defineProps<{
-    modelValue: number | null
+    modelValue: string | null
     placeholder?: string
     allowEmpty?: boolean
     emptyLabel?: string
@@ -25,7 +25,7 @@ const props = withDefaults(
 )
 
 const emit = defineEmits<{
-  'update:modelValue': [value: number | null]
+  'update:modelValue': [value: string | null]
 }>()
 
 const open = ref(false)
@@ -36,7 +36,7 @@ const { data: serverItems, refresh } = await useIncomeCompanies()
 const pending = ref<IncomeCompanyRow[]>([])
 
 const items = computed((): IncomeCompanyRow[] => {
-  const map = new Map<number, IncomeCompanyRow>()
+  const map = new Map<string, IncomeCompanyRow>()
   for (const c of serverItems.value ?? []) {
     map.set(c.id, c)
   }
@@ -73,7 +73,8 @@ watch(open, (isOpen) => {
 async function handleCreate(name: string) {
   const trimmed = name.trim()
   if (!trimmed || matchesExisting(trimmed)) return
-  const row = await $fetch<IncomeCompanyRow>('/api/companies', {
+  const api = useApiFetch()
+  const row = await api<IncomeCompanyRow>('/api/companies', {
     method: 'POST',
     body: { name: trimmed },
   })
@@ -83,7 +84,7 @@ async function handleCreate(name: string) {
   await refresh()
 }
 
-function handlePick(id: number) {
+function handlePick(id: string) {
   emit('update:modelValue', id)
   open.value = false
 }

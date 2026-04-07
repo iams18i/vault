@@ -17,7 +17,7 @@ import type { IncomeCompanyRow } from '~/composables/useIncomeCompanies'
 
 const props = defineProps<{
   items: IncomeCompanyRow[]
-  modelValue: number | null
+  modelValue: string | null
   open: boolean
   searchOnOpen: 'empty' | 'model'
   /** When set, prefill search with this name (selected company label). */
@@ -25,7 +25,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  pick: [id: number]
+  pick: [id: string]
   create: [name: string]
 }>()
 

@@ -1,21 +1,31 @@
-import { count, eq } from 'drizzle-orm'
+import { and, count, eq } from 'drizzle-orm'
 
 import { companies, monthlyIncome } from '../../db/schema'
+import { requireVaultAuth } from '../../utils/vault-scope'
 
 export default defineEventHandler(async (event) => {
-  const id = Number(getRouterParam(event, 'id'))
-  if (!Number.isFinite(id)) {
-    throw createError({ statusCode: 400, message: 'Invalid id' })
-  }
+  const id = getRouterParam(event, 'id')
+  if (!id) throw createError({ statusCode: 400, message: 'Invalid id' })
+
+  const { vaultId } = requireVaultAuth(event)
 
   const db = getDb()
-  const [row] = await db.select().from(companies).where(eq(companies.id, id)).limit(1)
+  const [row] = await db
+    .select()
+    .from(companies)
+    .where(and(eq(companies.id, id), eq(companies.vaultId, vaultId)))
+    .limit(1)
   if (!row) throw createError({ statusCode: 404, message: 'Not found' })
 
   const [incRow] = await db
     .select({ n: count() })
     .from(monthlyIncome)
-    .where(eq(monthlyIncome.companyId, id))
+    .where(
+      and(
+        eq(monthlyIncome.vaultId, vaultId),
+        eq(monthlyIncome.companyId, id),
+      ),
+    )
 
   const nInc = Number(incRow?.n ?? 0)
   if (nInc > 0) {
@@ -26,6 +36,8 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  await db.delete(companies).where(eq(companies.id, id))
+  await db
+    .delete(companies)
+    .where(and(eq(companies.id, id), eq(companies.vaultId, vaultId)))
   return { ok: true }
 })

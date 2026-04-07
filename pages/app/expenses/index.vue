@@ -3,11 +3,15 @@ import { onKeyStroke } from '@vueuse/core'
 
 import { fromYm, toYm } from '~/lib/month'
 
+definePageMeta({ layout: 'default' })
+
 const { format } = useCurrency()
 const { currentYm } = useMonth()
+const api = useApiFetch()
+const auth = useAuth()
 
 type Row = {
-  id: number
+  id: string
   month: string
   name: string
   amount: string
@@ -44,13 +48,16 @@ async function load() {
   try {
     const q: Record<string, string> = { month: toYm(filterMonth.value) }
     if (filterCategory.value) q.category = filterCategory.value
-    rows.value = await $fetch<Row[]>('/api/monthly-expenses', { query: q })
+    rows.value = await api<Row[]>('/api/monthly-expenses', { query: q })
   } finally {
     loading.value = false
   }
 }
 
 watch([filterMonth, filterCategory], load)
+watch(() => auth.currentVaultId.value, () => {
+  void load()
+})
 onMounted(() => {
   load()
   showAppleShortcut.value = /Mac|iPhone|iPod|iPad/i.test(navigator.userAgent)
@@ -74,7 +81,7 @@ function resetAddForm() {
 
 async function add() {
   if (!form.name || !form.amount) return
-  await $fetch('/api/monthly-expenses', {
+  await api('/api/monthly-expenses', {
     method: 'POST',
     body: {
       month: toYm(filterMonth.value),
@@ -90,9 +97,9 @@ async function add() {
   await load()
 }
 
-async function remove(id: number) {
+async function remove(id: string) {
   if (!confirm('Usunąć?')) return
-  await $fetch(`/api/monthly-expenses/${id}`, { method: 'DELETE' })
+  await api(`/api/monthly-expenses/${id}`, { method: 'DELETE' })
   await load()
 }
 
@@ -125,7 +132,7 @@ const editDialogOpen = computed({
 
 async function saveEdit() {
   if (!editing.value || !editForm.name || !editForm.amount) return
-  await $fetch(`/api/monthly-expenses/${editing.value.id}`, {
+  await api(`/api/monthly-expenses/${editing.value.id}`, {
     method: 'PUT',
     body: {
       month: toYm(editForm.month),

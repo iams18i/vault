@@ -1,10 +1,20 @@
 export type IncomeCompanyRow = {
-  id: number
+  id: string
   name: string
 }
 
 export function useIncomeCompanies() {
-  return useAsyncData('income-companies', () =>
-    $fetch<IncomeCompanyRow[]>('/api/companies'),
+  const auth = useAuth()
+  const key = computed(
+    () => `income-companies:${auth.currentVaultId.value ?? 'none'}`,
+  )
+  return useAsyncData(
+    key,
+    () => {
+      if (!auth.currentVaultId.value) return Promise.resolve([])
+      const api = useApiFetch()
+      return api<IncomeCompanyRow[]>('/api/companies')
+    },
+    { server: false, watch: [key] },
   )
 }

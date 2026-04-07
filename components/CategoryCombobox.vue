@@ -75,7 +75,8 @@ watch(open, (isOpen) => {
 async function handleCreate(name: string) {
   const trimmed = name.trim()
   if (!trimmed || matchesExisting(trimmed)) return
-  const row = await $fetch<ExpenseCategoryRow>('/api/categories', {
+  const api = useApiFetch()
+  const row = await api<ExpenseCategoryRow>('/api/categories', {
     method: 'POST',
     body: { name: trimmed },
   })

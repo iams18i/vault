@@ -1,11 +1,14 @@
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
+
 import { categories, monthlyExpenses, recurringCosts } from '../../db/schema'
 import { parseOptionalCategoryColorField } from '../../utils/categoryColor'
+import { requireVaultAuth } from '../../utils/vault-scope'
 
 export default defineEventHandler(async (event) => {
-  const id = Number(getRouterParam(event, 'id'))
-  if (!Number.isFinite(id))
-    throw createError({ statusCode: 400, message: 'Invalid id' })
+  const id = getRouterParam(event, 'id')
+  if (!id) throw createError({ statusCode: 400, message: 'Invalid id' })
+
+  const { vaultId } = requireVaultAuth(event)
 
   const body = await readBody<{
     name?: string | null
@@ -13,9 +16,12 @@ export default defineEventHandler(async (event) => {
   }>(event)
 
   const db = getDb()
-  const [current] = await db.select().from(categories).where(eq(categories.id, id)).limit(1)
-  if (!current)
-    throw createError({ statusCode: 404, message: 'Not found' })
+  const [current] = await db
+    .select()
+    .from(categories)
+    .where(and(eq(categories.id, id), eq(categories.vaultId, vaultId)))
+    .limit(1)
+  if (!current) throw createError({ statusCode: 404, message: 'Not found' })
 
   let newName = current.name
   if (body.name !== undefined) {
@@ -37,7 +43,11 @@ export default defineEventHandler(async (event) => {
   }
 
   if (newName !== current.name) {
-    const [dup] = await db.select().from(categories).where(eq(categories.name, newName)).limit(1)
+    const [dup] = await db
+      .select()
+      .from(categories)
+      .where(and(eq(categories.vaultId, vaultId), eq(categories.name, newName)))
+      .limit(1)
     if (dup && dup.id !== id) {
       throw createError({
         statusCode: 409,
@@ -54,18 +64,32 @@ export default defineEventHandler(async (event) => {
       await tx
         .update(monthlyExpenses)
         .set({ category: newName })
-        .where(eq(monthlyExpenses.category, oldName))
+        .where(
+          and(
+            eq(monthlyExpenses.vaultId, vaultId),
+            eq(monthlyExpenses.category, oldName),
+          ),
+        )
       await tx
         .update(recurringCosts)
         .set({ category: newName })
-        .where(eq(recurringCosts.category, oldName))
+        .where(
+          and(
+            eq(recurringCosts.vaultId, vaultId),
+            eq(recurringCosts.category, oldName),
+          ),
+        )
     }
     await tx
       .update(categories)
       .set({ name: newName, color: newColor })
-      .where(eq(categories.id, id))
+      .where(and(eq(categories.id, id), eq(categories.vaultId, vaultId)))
   })
 
-  const [updated] = await db.select().from(categories).where(eq(categories.id, id)).limit(1)
+  const [updated] = await db
+    .select()
+    .from(categories)
+    .where(and(eq(categories.id, id), eq(categories.vaultId, vaultId)))
+    .limit(1)
   return updated
 })

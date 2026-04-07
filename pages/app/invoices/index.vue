@@ -10,11 +10,15 @@ import {
 } from '~/constants/vat-pl'
 import { fromYm, toYm } from '~/lib/month'
 
+definePageMeta({ layout: 'default' })
+
 const { format } = useCurrency()
 const { currentYm } = useMonth()
+const api = useApiFetch()
+const auth = useAuth()
 
 type Row = {
-  id: number
+  id: string
   month: string
   invoiceNumber: string | null
   vendor: string | null
@@ -68,13 +72,16 @@ async function load() {
     const q: Record<string, string> = { month: toYm(filterMonth.value) }
     if (filterStatus.value && filterStatus.value !== 'all')
       q.status = filterStatus.value
-    rows.value = await $fetch<Row[]>('/api/invoices', { query: q })
+    rows.value = await api<Row[]>('/api/invoices', { query: q })
   } finally {
     loading.value = false
   }
 }
 
 watch([filterMonth, filterStatus], load)
+watch(() => auth.currentVaultId.value, () => {
+  void load()
+})
 
 const form = reactive({
   invoiceNumber: '',
@@ -173,7 +180,7 @@ async function submitAdd() {
   if (errs.length) return
   applyFinalDerive()
   try {
-    await $fetch('/api/invoices', {
+    await api('/api/invoices', {
       method: 'POST',
       body: {
         month: toYm(filterMonth.value),
@@ -215,14 +222,14 @@ onMounted(() => {
   showAppleShortcut.value = /Mac|iPhone|iPod|iPad/i.test(navigator.userAgent)
 })
 
-async function remove(id: number) {
+async function remove(id: string) {
   if (!confirm('Usunąć?')) return
-  await $fetch(`/api/invoices/${id}`, { method: 'DELETE' })
+  await api(`/api/invoices/${id}`, { method: 'DELETE' })
   await load()
 }
 
-async function markPaid(id: number) {
-  await $fetch(`/api/invoices/${id}`, {
+async function markPaid(id: string) {
+  await api(`/api/invoices/${id}`, {
     method: 'PUT',
     body: { status: 'paid', paidDate: new Date().toISOString().slice(0, 10) },
   })

@@ -1,32 +1,44 @@
-import { and, eq } from "drizzle-orm"
-import { monthlyExpenses } from "../../db/schema"
+import { and, eq } from 'drizzle-orm'
+
+import { monthlyExpenses } from '../../db/schema'
+import { requireVaultAuth } from '../../utils/vault-scope'
 
 export default defineEventHandler(async (event) => {
+  const { vaultId } = requireVaultAuth(event)
   const q = getQuery(event)
   const month = q.month as string | undefined
-  const category = typeof q.category === "string" && q.category.trim() !== "" ? q.category.trim() : undefined
+  const category =
+    typeof q.category === 'string' && q.category.trim() !== ''
+      ? q.category.trim()
+      : undefined
   const db = getDb()
+
+  const v = eq(monthlyExpenses.vaultId, vaultId)
 
   if (month && category) {
     return db
       .select()
       .from(monthlyExpenses)
-      .where(and(eq(monthlyExpenses.month, month), eq(monthlyExpenses.category, category)))
+      .where(and(v, eq(monthlyExpenses.month, month), eq(monthlyExpenses.category, category)))
       .orderBy(monthlyExpenses.id)
   }
   if (month) {
     return db
       .select()
       .from(monthlyExpenses)
-      .where(eq(monthlyExpenses.month, month))
+      .where(and(v, eq(monthlyExpenses.month, month)))
       .orderBy(monthlyExpenses.id)
   }
   if (category) {
     return db
       .select()
       .from(monthlyExpenses)
-      .where(eq(monthlyExpenses.category, category))
+      .where(and(v, eq(monthlyExpenses.category, category)))
       .orderBy(monthlyExpenses.id)
   }
-  return db.select().from(monthlyExpenses).orderBy(monthlyExpenses.id)
+  return db
+    .select()
+    .from(monthlyExpenses)
+    .where(v)
+    .orderBy(monthlyExpenses.id)
 })
