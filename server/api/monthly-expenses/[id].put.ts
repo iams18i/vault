@@ -16,6 +16,8 @@ export default defineEventHandler(async (event) => {
     category?: string | null
     expenseDate?: string | null
     notes?: string | null
+    paid?: boolean
+    paidAt?: string | null
   }>(event)
   const db = getDb()
   const [row] = await db
@@ -27,6 +29,10 @@ export default defineEventHandler(async (event) => {
       ...(body.category !== undefined ? { category: body.category } : {}),
       ...(body.expenseDate !== undefined ? { expenseDate: body.expenseDate } : {}),
       ...(body.notes !== undefined ? { notes: body.notes } : {}),
+      ...(body.paid !== undefined ? { paid: body.paid } : {}),
+      ...(body.paidAt !== undefined
+        ? { paidAt: body.paidAt ? new Date(body.paidAt) : null }
+        : {}),
     })
     .where(and(eq(monthlyExpenses.id, id), eq(monthlyExpenses.vaultId, vaultId)))
     .returning()

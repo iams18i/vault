@@ -123,6 +123,30 @@ export const recurringCosts = pgTable("recurring_costs", {
   notes: text("notes"),
 })
 
+/** Per calendar month: mark a recurring cost as paid for budgeting. */
+export const recurringCostPayments = pgTable(
+  "recurring_cost_payments",
+  {
+    id: idPk(),
+    vaultId: varchar("vault_id", { length: ID_LEN })
+      .notNull()
+      .references(() => vaults.id),
+    recurringCostId: varchar("recurring_cost_id", { length: ID_LEN })
+      .notNull()
+      .references(() => recurringCosts.id),
+    month: varchar("month", { length: 7 }).notNull(),
+    paid: boolean("paid").notNull().default(false),
+    paidAt: timestamp("paid_at", { mode: "date" }),
+  },
+  (t) => [
+    uniqueIndex("rcp_vault_rc_month_uq").on(
+      t.vaultId,
+      t.recurringCostId,
+      t.month,
+    ),
+  ],
+)
+
 export const monthlyExpenses = pgTable("monthly_expenses", {
   id: idPk(),
   vaultId: varchar("vault_id", { length: ID_LEN })
@@ -134,6 +158,8 @@ export const monthlyExpenses = pgTable("monthly_expenses", {
   category: varchar("category", { length: 128 }),
   expenseDate: date("expense_date"),
   notes: text("notes"),
+  paid: boolean("paid").notNull().default(false),
+  paidAt: timestamp("paid_at", { mode: "date" }),
 })
 
 export const invoices = pgTable("invoices", {
@@ -174,4 +200,5 @@ export const taxEntries = pgTable("tax_entries", {
     .default("pending")
     .$type<"pending" | "paid" | "partial">(),
   notes: text("notes"),
+  paidAt: timestamp("paid_at", { mode: "date" }),
 })

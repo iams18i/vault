@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ChevronLeft, ChevronRight } from 'lucide-vue-next'
+import { Check, ChevronLeft, ChevronRight, Plus } from 'lucide-vue-next'
 
 import { fromYm, shiftMonth, toYm } from '~/lib/month'
 
@@ -38,6 +38,8 @@ type DashboardResponse = {
       amount: string
       category: string | null
       dayOfMonth: number
+      paid: boolean
+      paidAt: string | null
     }>
     total: number
   }
@@ -47,6 +49,8 @@ type DashboardResponse = {
       name: string
       amount: string
       category: string | null
+      paid: boolean
+      paidAt: string | null
     }>
     total: number
   }
@@ -70,6 +74,7 @@ type DashboardResponse = {
       remaining: number
       status: string
       dueDate: string | null
+      paidAt: string | null
     }>
     totalDue: number
     totalPaid: number
@@ -80,6 +85,8 @@ type DashboardResponse = {
     recurringTotal: number
     expensesTotal: number
     invoicesTotal: number
+    /** Sum of amountDue for non-VAT tax entries (manual); paid status ignored. */
+    nonVatTaxTotal: number
     outflows: number
     remainingAfterCosts: number
   }
@@ -99,7 +106,15 @@ watch(month, (m) => {
 })
 
 const dashboardUrl = computed(() => `/api/dashboard/${toYm(month.value)}`)
-const { data, pending, error } = await useFetch<DashboardResponse>(dashboardUrl, {
+const dashboardYm = computed(() => toYm(month.value))
+const taxYear = computed(() => Number(dashboardYm.value.slice(0, 4)))
+const taxMonthNum = computed(() => Number(dashboardYm.value.slice(5, 7)))
+
+const addExpenseOpen = ref(false)
+const addInvoiceOpen = ref(false)
+const addTaxOpen = ref(false)
+
+const { data, pending, error, refresh } = await useFetch<DashboardResponse>(dashboardUrl, {
   server: false,
   headers: computed(() => {
     const h: Record<string, string> = {}
@@ -109,6 +124,148 @@ const { data, pending, error } = await useFetch<DashboardResponse>(dashboardUrl,
   }),
   watch: [dashboardUrl, () => auth.currentVaultId.value, () => auth.token.value],
 })
+
+const api = useApiFetch()
+
+async function toggleRecurringPaid(r: { id: string; paid: boolean }) {
+  const ym = dashboardYm.value
+  const prev = r.paid
+  const row = data.value?.recurring.items.find((x) => x.id === r.id)
+  if (row) row.paid = !prev
+  try {
+    if (prev) {
+      await api(`/api/recurring-costs/${r.id}/pay`, {
+        method: 'DELETE',
+        query: { month: ym },
+      })
+    } else {
+      await api(`/api/recurring-costs/${r.id}/pay`, {
+        method: 'POST',
+        body: { month: ym },
+      })
+    }
+    await refresh()
+  } catch {
+    if (row) row.paid = prev
+  }
+}
+
+async function toggleExpensePaid(e: { id: string; paid: boolean }) {
+  const prev = e.paid
+  const row = data.value?.expenses.items.find((x) => x.id === e.id)
+  if (row) row.paid = !prev
+  try {
+    await api(`/api/monthly-expenses/${e.id}/pay`, { method: 'POST' })
+    await refresh()
+  } catch {
+    if (row) row.paid = prev
+  }
+}
+
+async function markInvoicePaid(id: string) {
+  const inv = data.value?.invoices.items.find((x) => x.id === id)
+  const prevStatus = inv?.status
+  const today = new Date().toISOString().slice(0, 10)
+  if (inv) inv.status = 'paid'
+  try {
+    await api(`/api/invoices/${id}`, {
+      method: 'PUT',
+      body: { status: 'paid', paidDate: today },
+    })
+    await refresh()
+  } catch {
+    if (inv && prevStatus != null) inv.status = prevStatus
+  }
+}
+
+async function markTaxPaid(t: { id: string; amountDue: number }) {
+  const item = data.value?.taxes.items.find((x) => !x.synthetic && x.id === t.id)
+  const snap = item
+    ? {
+        status: item.status,
+        amountPaid: item.amountPaid,
+        remaining: item.remaining,
+        paidAt: item.paidAt,
+      }
+    : null
+  if (item) {
+    item.status = 'paid'
+    item.amountPaid = t.amountDue
+    item.remaining = 0
+    item.paidAt = new Date().toISOString()
+  }
+  try {
+    await api(`/api/tax-entries/${t.id}`, {
+      method: 'PUT',
+      body: { status: 'paid', amountPaid: String(t.amountDue) },
+    })
+    await refresh()
+  } catch {
+    if (item && snap) {
+      item.status = snap.status
+      item.amountPaid = snap.amountPaid
+      item.remaining = snap.remaining
+      item.paidAt = snap.paidAt
+    }
+  }
+}
+
+/** Cofnij oznaczenie zapłaty (wpis ręczny z pulpitu). */
+async function revertTaxPaid(t: { id: string; amountDue: number }) {
+  const item = data.value?.taxes.items.find((x) => !x.synthetic && x.id === t.id)
+  const snap = item
+    ? {
+        status: item.status,
+        amountPaid: item.amountPaid,
+        remaining: item.remaining,
+        paidAt: item.paidAt,
+      }
+    : null
+  if (item) {
+    item.status = 'pending'
+    item.amountPaid = 0
+    item.remaining = Math.round(t.amountDue * 100) / 100
+    item.paidAt = null
+  }
+  try {
+    await api(`/api/tax-entries/${t.id}`, {
+      method: 'PUT',
+      body: { status: 'pending', amountPaid: '0' },
+    })
+    await refresh()
+  } catch {
+    if (item && snap) {
+      item.status = snap.status
+      item.amountPaid = snap.amountPaid
+      item.remaining = snap.remaining
+      item.paidAt = snap.paidAt
+    }
+  }
+}
+
+async function markSyntheticVatPaid() {
+  try {
+    await api('/api/tax-entries/vat-from-income/pay', {
+      method: 'POST',
+      body: { month: dashboardYm.value },
+    })
+    await refresh()
+  } catch {
+    // noop
+  }
+}
+
+async function revertSyntheticVatPaid() {
+  try {
+    await api('/api/tax-entries/vat-from-income/pay', {
+      method: 'DELETE',
+      query: { month: dashboardYm.value },
+    })
+    await refresh()
+  } catch {
+    // noop
+  }
+}
 
 function prev() {
   month.value = shiftMonth(month.value, -1)
@@ -161,7 +318,7 @@ function vatDashLabel(row: {
         </p>
       </div>
       <ButtonGroup aria-label="Nawigacja miesiąca">
-        <Button variant="ghost" size="icon" @click="prev">
+        <Button type="button" variant="ghost" size="icon" @click.prevent="prev">
           <span class="sr-only">Poprzedni</span>
           <ChevronLeft class="size-4" />
         </Button>
@@ -169,14 +326,14 @@ function vatDashLabel(row: {
           v-model="month"
           class="w-44 rounded-none border-0 text-center justify-center"
         />
-        <Button variant="ghost" size="icon" @click="next">
+        <Button type="button" variant="ghost" size="icon" @click.prevent="next">
           <span class="sr-only">Następny</span>
           <ChevronRight class="size-4" />
         </Button>
       </ButtonGroup>
     </div>
 
-    <p v-if="pending" class="text-sm text-muted-foreground">Ładowanie…</p>
+    <p v-if="pending && !data" class="text-sm text-muted-foreground">Ładowanie…</p>
     <p v-else-if="error" class="text-sm text-destructive">Błąd ładowania</p>
 
     <template v-else-if="data">
@@ -272,20 +429,39 @@ function vatDashLabel(row: {
                     <TableHead class="whitespace-nowrap">Termin</TableHead>
                     <TableHead>Kategoria</TableHead>
                     <TableHead class="text-right">Kwota</TableHead>
+                    <TableHead class="w-[120px] text-right">Płatność</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   <TableRow v-for="r in data.recurring.items" :key="r.id">
-                    <TableCell class="font-medium">{{ r.name }}</TableCell>
-                    <TableCell class="whitespace-nowrap text-muted-foreground">{{
+                    <TableCell
+                      class="font-medium"
+                      :class="r.paid ? 'text-muted-foreground line-through' : ''"
+                      >{{ r.name }}</TableCell
+                    >
+                    <TableCell
+                      class="whitespace-nowrap text-muted-foreground"
+                      :class="r.paid ? 'line-through opacity-80' : ''"
+                      >{{
                       recurringPaymentDateLabel(data.month, r.dayOfMonth)
-                    }}</TableCell>
-                    <TableCell>
+                    }}</TableCell
+                    >
+                    <TableCell :class="r.paid ? 'opacity-60' : ''">
                       <CategoryLabel :name="r.category" as-badge />
                     </TableCell>
-                    <TableCell class="text-right tabular-nums">{{
-                      format(r.amount)
-                    }}</TableCell>
+                    <TableCell
+                      class="text-right tabular-nums"
+                      :class="r.paid ? 'text-muted-foreground line-through' : ''"
+                      >{{ format(r.amount) }}</TableCell
+                    >
+                    <TableCell class="text-right">
+                      <DashboardMarkPaidCell
+                        :paid="r.paid"
+                        :paid-at="r.paidAt"
+                        @mark-paid="toggleRecurringPaid(r)"
+                        @unmark-paid="toggleRecurringPaid(r)"
+                      />
+                    </TableCell>
                   </TableRow>
                 </TableBody>
               </Table>
@@ -301,9 +477,21 @@ function vatDashLabel(row: {
           </Card>
 
           <Card>
-            <CardHeader>
-              <CardTitle>Wydatki</CardTitle>
-              <CardDescription>Jednorazowe w miesiącu</CardDescription>
+            <CardHeader class="flex flex-row items-start justify-between gap-4 space-y-0">
+              <div class="space-y-1.5">
+                <CardTitle>Wydatki</CardTitle>
+                <CardDescription>Jednorazowe w miesiącu</CardDescription>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                class="shrink-0"
+                aria-label="Dodaj wydatek"
+                @click.prevent="addExpenseOpen = true"
+              >
+                <Plus class="size-4" />
+              </Button>
             </CardHeader>
             <CardContent class="space-y-4">
               <Table v-if="data.expenses.items.length">
@@ -312,17 +500,32 @@ function vatDashLabel(row: {
                     <TableHead>Nazwa</TableHead>
                     <TableHead>Kategoria</TableHead>
                     <TableHead class="text-right">Kwota</TableHead>
+                    <TableHead class="w-[120px] text-right">Płatność</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   <TableRow v-for="e in data.expenses.items" :key="e.id">
-                    <TableCell class="font-medium">{{ e.name }}</TableCell>
-                    <TableCell>
+                    <TableCell
+                      class="font-medium"
+                      :class="e.paid ? 'text-muted-foreground line-through' : ''"
+                      >{{ e.name }}</TableCell
+                    >
+                    <TableCell :class="e.paid ? 'opacity-60' : ''">
                       <CategoryLabel :name="e.category" as-badge />
                     </TableCell>
-                    <TableCell class="text-right tabular-nums">{{
-                      format(e.amount)
-                    }}</TableCell>
+                    <TableCell
+                      class="text-right tabular-nums"
+                      :class="e.paid ? 'text-muted-foreground line-through' : ''"
+                      >{{ format(e.amount) }}</TableCell
+                    >
+                    <TableCell class="text-right">
+                      <DashboardMarkPaidCell
+                        :paid="e.paid"
+                        :paid-at="e.paidAt"
+                        @mark-paid="toggleExpensePaid(e)"
+                        @unmark-paid="toggleExpensePaid(e)"
+                      />
+                    </TableCell>
                   </TableRow>
                 </TableBody>
               </Table>
@@ -338,23 +541,76 @@ function vatDashLabel(row: {
           </Card>
 
           <Card>
-            <CardHeader>
-              <CardTitle>Faktury (koszty)</CardTitle>
-              <CardDescription>Przypisane do miesiąca</CardDescription>
+            <CardHeader class="flex flex-row items-start justify-between gap-4 space-y-0">
+              <div class="space-y-1.5">
+                <CardTitle>Faktury (koszty)</CardTitle>
+                <CardDescription>Przypisane do miesiąca</CardDescription>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                class="shrink-0"
+                aria-label="Dodaj fakturę"
+                @click.prevent="addInvoiceOpen = true"
+              >
+                <Plus class="size-4" />
+              </Button>
             </CardHeader>
             <CardContent class="space-y-4">
               <Table v-if="data.invoices.items.length">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead class="max-w-[200px]">Kontrahent / nr</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead class="text-right">Kwota</TableHead>
+                    <TableHead class="w-[120px] text-right">Płatność</TableHead>
+                  </TableRow>
+                </TableHeader>
                 <TableBody>
                   <TableRow v-for="inv in data.invoices.items" :key="inv.id">
-                    <TableCell class="max-w-[200px] truncate">{{
-                      inv.vendor || inv.invoiceNumber || '—'
-                    }}</TableCell>
-                    <TableCell>
+                    <TableCell
+                      class="max-w-[200px] truncate"
+                      :class="
+                        inv.status === 'paid'
+                          ? 'text-muted-foreground line-through'
+                          : ''
+                      "
+                      >{{ inv.vendor || inv.invoiceNumber || '—' }}</TableCell
+                    >
+                    <TableCell
+                      :class="inv.status === 'paid' ? 'opacity-60' : ''"
+                    >
                       <Badge variant="outline">{{ inv.status }}</Badge>
                     </TableCell>
-                    <TableCell class="text-right tabular-nums">{{
-                      format(inv.grossAmount)
-                    }}</TableCell>
+                    <TableCell
+                      class="text-right tabular-nums"
+                      :class="
+                        inv.status === 'paid'
+                          ? 'text-muted-foreground line-through'
+                          : ''
+                      "
+                      >{{ format(inv.grossAmount) }}</TableCell
+                    >
+                    <TableCell class="text-right">
+                      <Button
+                        v-if="inv.status !== 'paid'"
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        class="text-muted-foreground"
+                        @click.prevent="markInvoicePaid(inv.id)"
+                      >
+                        Zapłać
+                      </Button>
+                      <span
+                        v-else
+                        class="inline-flex items-center gap-1 text-xs font-medium text-green-500 no-underline"
+                      >
+                        <Check class="size-4 shrink-0" aria-hidden="true" />
+                        Zapłacono
+                      </span>
+                    </TableCell>
                   </TableRow>
                 </TableBody>
               </Table>
@@ -370,31 +626,72 @@ function vatDashLabel(row: {
           </Card>
 
           <Card>
-            <CardHeader>
-              <CardTitle>Podatki</CardTitle>
-              <CardDescription>Wpisy za ten miesiąc</CardDescription>
+            <CardHeader class="flex flex-row items-start justify-between gap-4 space-y-0">
+              <div class="space-y-1.5">
+                <CardTitle>Podatki</CardTitle>
+                <CardDescription>Wpisy za ten miesiąc</CardDescription>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                class="shrink-0"
+                aria-label="Dodaj wpis podatkowy"
+                @click.prevent="addTaxOpen = true"
+              >
+                <Plus class="size-4" />
+              </Button>
             </CardHeader>
             <CardContent class="space-y-4">
               <ul class="space-y-3 text-sm">
                 <li
                   v-for="t in data.taxes.items"
                   :key="t.synthetic ? 'vat-from-income' : t.id"
-                  class="flex flex-col gap-1 border-b border-border pb-3 last:border-0"
+                  class="flex flex-row items-center justify-between gap-3 border-b border-border pb-3 last:border-0"
                 >
-                  <span class="font-medium flex flex-wrap items-center gap-2">
-                    {{ t.name }}
-                    <Badge v-if="t.synthetic" variant="tag">z dochodu</Badge>
-                  </span>
-                  <span class="text-muted-foreground">
-                    Należne {{ format(t.amountDue) }} · Zapłacone
-                    {{ format(t.amountPaid) }} · Pozostało
+                  <div
+                    class="min-w-0 flex flex-col gap-1"
+                    :class="
+                      t.status === 'paid'
+                        ? 'text-muted-foreground line-through'
+                        : ''
+                    "
+                  >
+                    <span class="font-medium flex flex-wrap items-center gap-2">
+                      {{ t.name }}
+                      <Badge v-if="t.synthetic" variant="tag">z dochodu</Badge>
+                    </span>
                     <span
+                      class="text-muted-foreground"
                       :class="
-                        t.remaining > 0 ? 'text-foreground font-medium' : ''
+                        t.status === 'paid'
+                          ? 'line-through opacity-90'
+                          : ''
                       "
-                      >{{ format(t.remaining) }}</span
                     >
-                  </span>
+                      Należne {{ format(t.amountDue) }} · Zapłacone
+                      {{ format(t.amountPaid) }} · Pozostało
+                      <span
+                        :class="
+                          t.remaining > 0 ? 'text-foreground font-medium' : ''
+                        "
+                        >{{ format(t.remaining) }}</span
+                      >
+                    </span>
+                  </div>
+                  <div class="shrink-0">
+                    <DashboardMarkPaidCell
+                      :paid="t.status === 'paid'"
+                      :paid-at="t.paidAt"
+                      :reversible="!t.synthetic || !!t.paidAt"
+                      @mark-paid="
+                        t.synthetic ? markSyntheticVatPaid() : markTaxPaid(t)
+                      "
+                      @unmark-paid="
+                        t.synthetic ? revertSyntheticVatPaid() : revertTaxPaid(t)
+                      "
+                    />
+                  </div>
                 </li>
               </ul>
               <Separator />
@@ -426,10 +723,11 @@ function vatDashLabel(row: {
           <Card class="border-primary/20">
             <CardHeader>
               <CardTitle>Podsumowanie</CardTitle>
-              <CardDescription
-                >Po kosztach operacyjnych (bez potrącania podatków z
-                kwoty)</CardDescription
-              >
+              <CardDescription>
+                Dochód netto minus koszty operacyjne oraz suma należnych
+                podatków (bez VAT od sprzedaży). Oznaczenia „zapłacono” w
+                tabelach są informacyjne.
+              </CardDescription>
             </CardHeader>
             <CardContent class="space-y-3 text-sm">
               <div class="flex justify-between">
@@ -456,6 +754,12 @@ function vatDashLabel(row: {
                   >−{{ format(data.summary.invoicesTotal) }}</span
                 >
               </div>
+              <div class="flex justify-between text-muted-foreground">
+                <span>− Podatki (bez VAT)</span>
+                <span class="tabular-nums"
+                  >−{{ format(data.summary.nonVatTaxTotal) }}</span
+                >
+              </div>
               <Separator />
               <div class="flex justify-between text-lg font-semibold">
                 <span>Pozostało</span>
@@ -471,12 +775,30 @@ function vatDashLabel(row: {
                 </span>
               </div>
               <p class="text-xs text-muted-foreground pt-2">
-                Podatki planuj osobno wg sekcji Podatki.
+                VAT od sprzedaży jest w sekcji Podatki; tutaj tylko podatki poza
+                VAT (suma należnych z wpisów).
               </p>
             </CardContent>
           </Card>
         </div>
       </div>
     </template>
+
+    <AddExpenseDialog
+      v-model:open="addExpenseOpen"
+      :month="dashboardYm"
+      @saved="refresh()"
+    />
+    <AddInvoiceDialog
+      v-model:open="addInvoiceOpen"
+      :month="dashboardYm"
+      @saved="refresh()"
+    />
+    <AddTaxEntryDialog
+      v-model:open="addTaxOpen"
+      :year="taxYear"
+      :initial-month="taxMonthNum"
+      @saved="refresh()"
+    />
   </div>
 </template>
