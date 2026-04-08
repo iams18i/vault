@@ -1,20 +1,17 @@
-import { and, eq, gte, isNull, lte, or } from 'drizzle-orm'
+import { and, eq, gte, inArray, isNull, lte, or } from 'drizzle-orm'
 
 import {
   companies,
   invoices,
   monthlyExpenses,
   monthlyIncome,
+  recurringCostPayments,
   recurringCosts,
   taxEntries,
 } from '../../db/schema'
 import { num } from '../../utils/parse'
 import { requireVaultAuth } from '../../utils/vault-scope'
-
-/** Tax entries whose name references VAT — merged into dashboard „VAT (z dochodu)” for paid/due tracking. */
-function isVatTaxEntryName(name: string): boolean {
-  return /\bvat\b/i.test(name.trim())
-}
+import { isVatTaxEntryName, SYNTHETIC_VAT_FROM_INCOME_NAME } from '../../utils/vatFromIncome'
 
 function parseMonth(ym: string) {
   const m = /^(\d{4})-(\d{2})$/.exec(ym)
@@ -76,8 +73,43 @@ export default defineEventHandler(async (event) => {
         or(isNull(recurringCosts.endDate), gte(recurringCosts.endDate, firstDay)),
       ),
     )
+    .orderBy(recurringCosts.id)
 
-  const recurringTotal = recurringRows.reduce((s, r) => s + num(r.amount), 0)
+  const recurringPaymentById = new Map<
+    string,
+    { paid: boolean; paidAt: Date | null }
+  >()
+  if (recurringRows.length) {
+    const ids = recurringRows.map((r) => r.id)
+    const payRows = await db
+      .select()
+      .from(recurringCostPayments)
+      .where(
+        and(
+          eq(recurringCostPayments.vaultId, vaultId),
+          eq(recurringCostPayments.month, monthParam),
+          inArray(recurringCostPayments.recurringCostId, ids),
+        ),
+      )
+    for (const p of payRows) {
+      recurringPaymentById.set(p.recurringCostId, {
+        paid: p.paid,
+        paidAt: p.paidAt ?? null,
+      })
+    }
+  }
+
+  const recurringItems = recurringRows.map((r) => {
+    const pay = recurringPaymentById.get(r.id)
+    const paid = pay?.paid ?? false
+    return {
+      ...r,
+      paid,
+      paidAt: paid && pay?.paidAt ? pay.paidAt : null,
+    }
+  })
+
+  const recurringTotal = recurringItems.reduce((s, r) => s + num(r.amount), 0)
 
   const expenseRows = await db
     .select()
@@ -85,6 +117,7 @@ export default defineEventHandler(async (event) => {
     .where(
       and(eq(monthlyExpenses.vaultId, vaultId), eq(monthlyExpenses.month, monthParam)),
     )
+    .orderBy(monthlyExpenses.id)
 
   const expensesTotal = expenseRows.reduce((s, r) => s + num(r.amount), 0)
 
@@ -92,6 +125,7 @@ export default defineEventHandler(async (event) => {
     .select()
     .from(invoices)
     .where(and(eq(invoices.vaultId, vaultId), eq(invoices.month, monthParam)))
+    .orderBy(invoices.id)
 
   const invoicesTotal = invoiceRows.reduce((s, r) => s + num(r.grossAmount), 0)
 
@@ -105,6 +139,7 @@ export default defineEventHandler(async (event) => {
         eq(taxEntries.month, mo),
       ),
     )
+    .orderBy(taxEntries.id)
 
   const vatEntryRows = taxRows.filter((t) => isVatTaxEntryName(t.name))
   const otherTaxRows = taxRows.filter((t) => !isVatTaxEntryName(t.name))
@@ -119,6 +154,9 @@ export default defineEventHandler(async (event) => {
         ? 'paid'
         : 'partial'
 
+  const vatBackingRow = vatEntryRows.find((t) => t.name.trim() === SYNTHETIC_VAT_FROM_INCOME_NAME)
+  const vatBackingPaidAt = vatBackingRow?.paidAt ?? null
+
   const syntheticVat = {
     id: 'vat-from-income' as const,
     synthetic: true,
@@ -128,6 +166,7 @@ export default defineEventHandler(async (event) => {
     remaining: vatRemaining,
     status: vatStatus,
     dueDate: null as string | null,
+    paidAt: vatBackingPaidAt ? vatBackingPaidAt.toISOString() : null,
   }
 
   let taxDueTotal = vatDueFromIncome
@@ -146,13 +185,18 @@ export default defineEventHandler(async (event) => {
       remaining: Math.round((due - paid) * 100) / 100,
       status: t.status,
       dueDate: t.dueDate,
+      paidAt: t.paidAt ?? null,
     }
   })
+
+  /** Suma należnych z ręcznych wpisów podatkowych (bez VAT w nazwie); bez znaczenia czy zapłacone. */
+  const nonVatTaxTotal =
+    Math.round(otherTaxRows.reduce((s, t) => s + num(t.amountDue), 0) * 100) / 100
 
   const taxes = [syntheticVat, ...otherTaxItems]
 
   const outflows = Math.round((recurringTotal + expensesTotal + invoicesTotal) * 100) / 100
-  const remaining = Math.round((netIncome - outflows) * 100) / 100
+  const remaining = Math.round((netIncome - outflows - nonVatTaxTotal) * 100) / 100
   const taxRemaining = Math.round((taxDueTotal - taxPaidTotal) * 100) / 100
 
   return {
@@ -163,7 +207,7 @@ export default defineEventHandler(async (event) => {
       grossTotal: incomeGrossTotal,
       items: incomeRows,
     },
-    recurring: { items: recurringRows, total: recurringTotal },
+    recurring: { items: recurringItems, total: recurringTotal },
     expenses: { items: expenseRows, total: expensesTotal },
     invoices: { items: invoiceRows, total: invoicesTotal },
     taxes: { items: taxes, totalDue: taxDueTotal, totalPaid: taxPaidTotal, remaining: taxRemaining },
@@ -172,6 +216,7 @@ export default defineEventHandler(async (event) => {
       recurringTotal,
       expensesTotal,
       invoicesTotal,
+      nonVatTaxTotal,
       outflows,
       remainingAfterCosts: remaining,
     },

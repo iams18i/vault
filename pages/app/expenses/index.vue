@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onKeyStroke } from '@vueuse/core'
 
+import AddExpenseDialog from '~/components/AddExpenseDialog.vue'
 import { fromYm, toYm } from '~/lib/month'
 
 definePageMeta({ layout: 'default' })
@@ -28,6 +29,8 @@ const addDialogOpen = ref(false)
 
 const showAppleShortcut = ref(true)
 
+const monthYm = computed(() => toYm(filterMonth.value))
+
 function openAddDialog() {
   addDialogOpen.value = true
 }
@@ -46,7 +49,7 @@ onKeyStroke(
 async function load() {
   loading.value = true
   try {
-    const q: Record<string, string> = { month: toYm(filterMonth.value) }
+    const q: Record<string, string> = { month: monthYm.value }
     if (filterCategory.value) q.category = filterCategory.value
     rows.value = await api<Row[]>('/api/monthly-expenses', { query: q })
   } finally {
@@ -62,40 +65,6 @@ onMounted(() => {
   load()
   showAppleShortcut.value = /Mac|iPhone|iPod|iPad/i.test(navigator.userAgent)
 })
-
-const form = reactive({
-  name: '',
-  amount: '',
-  category: '',
-  expenseDate: '',
-  notes: '',
-})
-
-function resetAddForm() {
-  form.name = ''
-  form.amount = ''
-  form.category = ''
-  form.expenseDate = ''
-  form.notes = ''
-}
-
-async function add() {
-  if (!form.name || !form.amount) return
-  await api('/api/monthly-expenses', {
-    method: 'POST',
-    body: {
-      month: toYm(filterMonth.value),
-      name: form.name,
-      amount: form.amount,
-      category: form.category || null,
-      expenseDate: form.expenseDate || null,
-      notes: form.notes || null,
-    },
-  })
-  resetAddForm()
-  addDialogOpen.value = false
-  await load()
-}
 
 async function remove(id: string) {
   if (!confirm('Usunąć?')) return
@@ -253,60 +222,11 @@ async function saveEdit() {
       </CardContent>
     </Card>
 
-    <Dialog v-model:open="addDialogOpen">
-      <DialogContent class="sm:max-w-lg">
-        <form @submit.prevent="add">
-          <DialogHeader>
-            <DialogTitle>Nowy wydatek</DialogTitle>
-            <DialogDescription>
-              Wpis zostanie dodany do miesiąca: {{ toYm(filterMonth) }}.
-            </DialogDescription>
-          </DialogHeader>
-          <div class="grid gap-4 py-2">
-            <div class="grid gap-4 sm:grid-cols-2">
-              <div class="grid gap-2 sm:col-span-2">
-                <Label for="exp-add-name">Nazwa</Label>
-                <Input id="exp-add-name" v-model="form.name" />
-              </div>
-              <div class="grid gap-2">
-                <Label for="exp-add-amount">Kwota</Label>
-                <Input
-                  id="exp-add-amount"
-                  v-model="form.amount"
-                  type="number"
-                  step="0.01"
-                />
-              </div>
-              <div class="grid gap-2">
-                <Label>Kategoria</Label>
-                <CategoryCombobox v-model="form.category" />
-              </div>
-              <div class="grid gap-2 sm:col-span-2">
-                <Label for="exp-add-date">Data</Label>
-                <DatePickerField
-                  id="exp-add-date"
-                  v-model="form.expenseDate"
-                  placeholder="Brak daty"
-                />
-              </div>
-              <div class="grid gap-2 sm:col-span-2">
-                <Label for="exp-add-notes">Notatki</Label>
-                <Input id="exp-add-notes" v-model="form.notes" />
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              @click="addDialogOpen = false"
-              >Anuluj</Button
-            >
-            <Button type="submit">Dodaj</Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+    <AddExpenseDialog
+      v-model:open="addDialogOpen"
+      :month="monthYm"
+      @saved="load"
+    />
 
     <Dialog v-model:open="editDialogOpen">
       <DialogContent class="sm:max-w-lg">

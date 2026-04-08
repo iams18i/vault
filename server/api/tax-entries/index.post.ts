@@ -29,6 +29,7 @@ export default defineEventHandler(async (event) => {
       dueDate: body.dueDate ?? null,
       status: body.status ?? 'pending',
       notes: body.notes ?? null,
+      paidAt: body.status === 'paid' ? new Date() : null,
     })
     .returning()
   return row
