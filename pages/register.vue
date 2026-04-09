@@ -1,13 +1,6 @@
 <script setup lang="ts">
+import { Eye, EyeOff } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
@@ -18,6 +11,7 @@ const auth = useAuth()
 const name = ref('')
 const email = ref('')
 const password = ref('')
+const showPassword = ref(false)
 const loading = ref(false)
 const errorMsg = ref<string | null>(null)
 const successMsg = ref<string | null>(null)
@@ -48,76 +42,118 @@ async function submit() {
 </script>
 
 <template>
-  <div class="flex min-h-svh items-center justify-center p-4">
-    <Card class="w-full max-w-md">
-      <div class="flex justify-center pt-6">
-        <VaultLogo class="h-10 w-auto text-foreground" />
-      </div>
-      <CardHeader class="space-y-1">
-        <CardTitle class="text-2xl">Rejestracja</CardTitle>
-        <CardDescription>
+  <div class="relative flex min-h-svh flex-col items-center justify-center px-4 py-10 sm:py-16">
+    <div
+      class="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,hsl(var(--primary)/0.12),transparent)]"
+    />
+    <div class="relative z-10 w-full max-w-[400px]">
+      <div class="mb-8 flex flex-col items-center text-center sm:mb-10">
+        <VaultLogo class="h-9 w-auto text-foreground sm:h-10" />
+        <h1 class="mt-6 text-2xl font-semibold tracking-tight sm:text-[1.75rem]">
+          Rejestracja
+        </h1>
+        <p class="mt-2 text-sm leading-relaxed text-muted-foreground">
           Utworzymy konto i domyślną przestrzeń danych. Na podany adres wyślemy
           link aktywacyjny.
-        </CardDescription>
-      </CardHeader>
-      <form @submit.prevent="submit">
-        <CardContent class="space-y-4">
-          <p
-            v-if="successMsg"
-            class="text-sm text-green-500 dark:text-green-400"
-            role="status"
+        </p>
+      </div>
+
+      <form class="space-y-5" @submit.prevent="submit">
+        <div
+          v-if="successMsg"
+          class="rounded-lg border border-green-500/40 bg-green-500/10 px-3 py-2.5 text-sm text-green-600 dark:text-green-400"
+          role="status"
+        >
+          {{ successMsg }}
+        </div>
+        <div
+          v-else-if="errorMsg"
+          class="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2.5 text-sm text-destructive"
+          role="alert"
+        >
+          {{ errorMsg }}
+        </div>
+
+        <div class="space-y-2">
+          <Label for="reg-name" class="text-sm font-medium"
+            >Imię lub nazwa <span class="font-normal text-muted-foreground">(opcjonalnie)</span></Label
           >
-            {{ successMsg }}
-          </p>
-          <p
-            v-else-if="errorMsg"
-            class="text-destructive text-sm"
-            role="alert"
+          <Input
+            id="reg-name"
+            v-model="name"
+            autocomplete="name"
+            class="h-11"
+            placeholder="Jan Kowalski"
+            :disabled="!!successMsg"
+          />
+        </div>
+
+        <div class="space-y-2">
+          <Label for="reg-email" class="text-sm font-medium">E-mail</Label>
+          <Input
+            id="reg-email"
+            v-model="email"
+            type="email"
+            autocomplete="email"
+            class="h-11"
+            placeholder="twoj@email.pl"
+            required
+            :disabled="!!successMsg"
+          />
+        </div>
+
+        <div class="space-y-2">
+          <Label for="reg-password" class="text-sm font-medium"
+            >Hasło <span class="font-normal text-muted-foreground">(min. 8 znaków)</span></Label
           >
-            {{ errorMsg }}
-          </p>
-          <div class="space-y-2">
-            <Label for="reg-name">Imię lub nazwa (opcjonalnie)</Label>
-            <Input id="reg-name" v-model="name" autocomplete="name" />
-          </div>
-          <div class="space-y-2">
-            <Label for="reg-email">E-mail</Label>
-            <Input
-              id="reg-email"
-              v-model="email"
-              type="email"
-              autocomplete="email"
-              required
-            />
-          </div>
-          <div class="space-y-2">
-            <Label for="reg-password">Hasło (min. 8 znaków)</Label>
+          <div class="relative">
             <Input
               id="reg-password"
               v-model="password"
-              type="password"
+              :type="showPassword ? 'text' : 'password'"
               autocomplete="new-password"
+              class="h-11 pr-11"
               required
               minlength="8"
+              :disabled="!!successMsg"
             />
+            <button
+              type="button"
+              class="absolute right-0 top-0 flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
+              :aria-pressed="showPassword"
+              :aria-label="showPassword ? 'Ukryj hasło' : 'Pokaż hasło'"
+              :disabled="!!successMsg"
+              @click="showPassword = !showPassword"
+            >
+              <EyeOff v-if="showPassword" class="size-4" />
+              <Eye v-else class="size-4" />
+            </button>
           </div>
-        </CardContent>
-        <CardFooter class="flex-col gap-4 sm:flex-row sm:justify-between">
-          <Button
-            type="submit"
-            class="w-full sm:w-auto"
-            :disabled="loading || !!successMsg"
-          >
-            {{ loading ? 'Tworzenie…' : 'Zarejestruj' }}
-          </Button>
-          <NuxtLink
-            to="/login"
-            class="text-muted-foreground hover:text-foreground text-sm underline-offset-4 hover:underline"
-          >
-            Masz konto? Zaloguj się
-          </NuxtLink>
-        </CardFooter>
+        </div>
+
+        <Button
+          type="submit"
+          class="h-11 w-full text-base"
+          :disabled="loading || !!successMsg"
+        >
+          {{ loading ? 'Tworzenie konta…' : 'Zarejestruj się' }}
+        </Button>
       </form>
-    </Card>
+
+      <p class="mt-8 text-center text-sm text-muted-foreground">
+        Masz już konto?
+        <NuxtLink
+          to="/login"
+          class="font-medium text-foreground underline-offset-4 hover:underline"
+        >
+          Zaloguj się
+        </NuxtLink>
+      </p>
+
+      <p class="mt-8 text-center text-[11px] leading-relaxed text-muted-foreground">
+        Rejestrując się, potwierdzasz zapoznanie z regulaminem i polityką
+        prywatności serwisu Vault.
+      </p>
+    </div>
   </div>
 </template>
