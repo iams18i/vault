@@ -53,8 +53,7 @@ const links = [
 ] as const
 
 function linkActive(to: string) {
-  if (to === '/app')
-    return route.path === '/app' || route.path === '/app/'
+  if (to === '/app') return route.path === '/app' || route.path === '/app/'
   return route.path === to || route.path.startsWith(`${to}/`)
 }
 
@@ -76,19 +75,11 @@ const currentVaultName = computed(() => {
                   size="lg"
                   class="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
                 >
-                  <div
-                    class="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground"
-                  >
-                    <LayoutDashboard class="size-4" />
+                  <div class="flex items-center gap-2">
+                    <VaultLogo class="h-7 w-auto shrink-0 text-foreground" />
+                    <Badge variant="tag">{{ currentVaultName }}</Badge>
                   </div>
-                  <div class="grid min-w-0 flex-1 text-left text-sm leading-tight">
-                    <span class="truncate font-semibold">{{
-                      currentVaultName
-                    }}</span>
-                    <span class="truncate text-xs text-muted-foreground"
-                      >Przełącz przestrzeń</span
-                    >
-                  </div>
+
                   <ChevronDown class="ml-auto size-4 opacity-50" />
                 </SidebarMenuButton>
               </DropdownMenuTrigger>

@@ -13,6 +13,7 @@ definePageMeta({ layout: 'public' })
     />
     <div class="relative z-10 max-w-lg text-center space-y-8">
       <div class="space-y-3">
+        <VaultLogo class="mx-auto h-12 w-auto text-foreground mb-12" />
         <h1 class="text-3xl font-semibold tracking-tight sm:text-4xl">
           Księgowość dla freelancera
         </h1>

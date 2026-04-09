@@ -49,6 +49,9 @@ async function submit() {
 <template>
   <div class="flex min-h-svh items-center justify-center p-4">
     <Card class="w-full max-w-md">
+      <div class="flex justify-center pt-6">
+        <VaultLogo class="h-10 w-auto text-foreground" />
+      </div>
       <CardHeader class="space-y-1">
         <CardTitle class="text-2xl">Logowanie</CardTitle>
         <CardDescription>
