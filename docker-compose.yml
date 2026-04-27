@@ -1,3 +1,8 @@
+networks:
+  # Fixed name so other compose projects can attach: `external: true` + `name: expenses_network`
+  expenses_network:
+    external: true
+
 services:
   db:
     image: postgres:16-alpine
@@ -6,11 +11,15 @@ services:
       POSTGRES_PASSWORD: expenses
       POSTGRES_DB: expenses
     ports:
-      - "5432:5432"
+      - "0.0.0.0:5432:5432"
+    networks:
+      default:
+      expenses_network:
+
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U expenses -d expenses']
+      test: [ "CMD-SHELL", "pg_isready -U expenses -d expenses" ]
       interval: 2s
       timeout: 5s
       retries: 15
@@ -27,7 +36,7 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    restart: 'no'
+    restart: "no"
 
   app:
     build: .
