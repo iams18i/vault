@@ -1,7 +1,8 @@
 networks:
   # Fixed name so other compose projects can attach: `external: true` + `name: expenses_network`
-  expenses_network:
+  shared-db:
     external: true
+    name: shared-db
 
 services:
   db:
@@ -13,8 +14,8 @@ services:
     ports:
       - "0.0.0.0:5432:5432"
     networks:
-      default:
-      expenses_network:
+      - default
+      - shared-db
 
     volumes:
       - pgdata:/var/lib/postgresql/data
@@ -33,6 +34,9 @@ services:
       target: migrate
     environment:
       DATABASE_URL: postgres://expenses:expenses@db:5432/expenses
+    networks:
+      - default
+      - shared-db
     depends_on:
       db:
         condition: service_healthy
@@ -48,6 +52,9 @@ services:
       NODE_ENV: production
       NITRO_HOST: 0.0.0.0
       PORT: 3000
+    networks:
+      - default
+      - shared-db
     depends_on:
       db:
         condition: service_healthy
